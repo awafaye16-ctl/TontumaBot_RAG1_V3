@@ -1,0 +1,56 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Données sensibles ─────────────────────────────────────────────────────────
+# Ne pas commiter le .env avec les clés API
+.env
+env/
+.venv/
+
+# ── Poids des modèles (> 100 MB) ─────────────────────────────────────────────
+*.safetensors
+*.bin
+*.ckpt
+*.h5
+*.pt
+*.pth
+*.msgpack
+
+# ── Base vectorielle ChromaDB ─────────────────────────────────────────────────
+data/chroma/
+
+# ── Modèles locaux téléchargés ────────────────────────────────────────────────
+src/stt_wolof-whisper-small-lora/
+src/Wo_fr_bilalfayenllb-200-distilled-600M-wo-fr-en/
+src/Fr-Wo_Lahadnllb200-francais-wolof/
+wolof-whisper-small-lora/*.safetensors
+wolof-whisper-small-lora/*.bin
+
+# ── Fichiers audio générés ────────────────────────────────────────────────────
+*.wav
+*.mp3
+*.aac
+*.m4a
+*.webm
+uploads/
+
+# ── Résultats d'évaluation ────────────────────────────────────────────────────
+resultats_ragas/
+
+# ── Fichiers système ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.code-workspace

@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TontumaBot V3 — Assistant administratif</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #e8edf9;
+      --muted: #94a0c0;
+      --green: #22d39a;
+      --green2: #0ea87a;
+      --accent: #4f7cff;
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(79, 124, 255, 0.18), transparent 60%),
+        radial-gradient(800px 500px at 10% 110%, rgba(34, 211, 154, 0.12), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 920px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 16px 0;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 14px;
+    }
+
+    .logo {
+      width: 46px;
+      height: 46px;
+      border-radius: 13px;
+      background: linear-gradient(135deg, var(--green), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 23px;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 8px 30px rgba(79, 124, 255, 0.4);
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-size: 19px;
+      font-weight: 700;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 1px;
+    }
+
+    .badges {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .badge.on {
+      color: var(--green);
+      border-color: rgba(34, 211, 154, 0.4);
+    }
+
+    /* ---- Chat ---- */
+    .chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 4px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .chat::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .chat::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .msg {
+      display: flex;
+      gap: 10px;
+      max-width: 85%;
+      animation: pop .25s ease;
+    }
+
+    @keyframes pop {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .msg.user .avatar {
+      background: linear-gradient(135deg, var(--accent), #6f5cff);
+    }
+
+    .msg.bot .avatar {
+      background: linear-gradient(135deg, var(--green), var(--green2));
+    }
+
+    .bubble {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      line-height: 1.6;
+      font-size: 14px;
+      backdrop-filter: blur(8px);
+    }
+
+    .msg.user .bubble {
+      background: rgba(79, 124, 255, 0.14);
+      border-color: rgba(79, 124, 255, 0.35);
+    }
+
+    .bubble .lang-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .bubble .original {
+      color: var(--muted);
+      font-size: 12.5px;
+      margin-bottom: 4px;
+      font-style: italic;
+    }
+
+    /* Pipeline trace */
+    .trace {
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .step .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .step.done .dot {
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(34, 211, 154, 0.6);
+    }
+
+    .step b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .step .val {
+      color: var(--accent);
+    }
+
+    .audio {
+      margin-top: 10px;
+      width: 100%;
+    }
+
+    .context {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      border-left: 2px solid var(--border);
+      padding-left: 10px;
+      max-height: 90px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .typing {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      padding: 4px 2px;
+    }
+
+    .typing span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      animation: blink 1.2s infinite;
+    }
+
+    .typing span:nth-child(2) {
+      animation-delay: .2s;
+    }
+
+    .typing span:nth-child(3) {
+      animation-delay: .4s;
+    }
+
+    @keyframes blink {
+
+      0%,
+      80%,
+      100% {
+        opacity: .2;
+      }
+
+      40% {
+        opacity: 1;
+      }
+    }
+
+    /* ---- Saisie ---- */
+    .composer {
+      padding: 14px 0 18px;
+    }
+
+    .tools {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .tool {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      border-radius: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .tool:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .tool .fn {
+      font-size: 10px;
+      opacity: .7;
+    }
+
+    .tool.rec {
+      background: rgba(255, 92, 122, 0.18);
+      border-color: rgba(255, 92, 122, 0.6);
+      color: #ff8ba1;
+      animation: pulse 1.2s infinite;
+    }
+
+    .tool.rec:hover {
+      color: #ff8ba1;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 92, 122, 0.35);
+      }
+
+      50% {
+        box-shadow: 0 0 0 9px rgba(255, 92, 122, 0);
+      }
+    }
+
+    .inputrow {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    textarea {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--text);
+      padding: 13px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      max-height: 120px;
+      transition: border .2s;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .btn {
+      background: linear-gradient(135deg, var(--green), var(--green2));
+      color: #04231a;
+      font-weight: 700;
+      border: none;
+      border-radius: 14px;
+      width: 48px;
+      height: 48px;
+      font-size: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform .15s, filter .2s;
+    }
+
+    .btn:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .side {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .switch {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .switch input {
+      accent-color: var(--green);
+      width: 14px;
+      height: 14px;
+    }
+
+    .tts-select {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      padding: 4px 6px;
+      cursor: pointer;
+      outline: none;
+      transition: border .2s;
+    }
+
+    .tts-select:focus {
+      border-color: var(--accent);
+    }
+
+    .tts-select option {
+      background: #151d33;
+      color: var(--text);
+    }
+
+    .examples {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .chip {
+      font-size: 11.5px;
+      padding: 6px 11px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .chip:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .fileinfo {
+      font-size: 11px;
+      color: var(--green);
+      margin-top: 8px;
+      display: none;
+    }
+
+    .fileinfo.show {
+      display: block;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a2340;
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      z-index: 50;
+      display: none;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, .4);
+    }
+
+    .toast.show {
+      display: block;
+      animation: pop .2s ease;
+    }
+
+    @media (max-width: 640px) {
+      .app {
+        padding: 12px 10px 0;
+      }
+
+      .msg {
+        max-width: 92%;
+      }
+
+      .badges {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">T</div>
+      <div>
+        <h1>TontumaBot</h1>
+        <div class="sub">Assistant administratif — Wolof · Français · RAG</div>
+      </div>
+      <div class="badges">
+        <span class="badge" id="badge-llm">LLM: —</span>
+        <span class="badge" id="badge-lang">Détecteur actif</span>
+        <span class="badge on" id="badge-v2">V2 — Reranker</span>
+      </div>
+    </header>
+
+    <div class="chat" id="chat"></div>
+
+    <div class="composer">
+      <div class="tools">
+        <button class="tool" id="btn-audio">🎙️ <span>Parler</span> <span class="fn"
+            id="rec-timer">micro</span></button>
+        <button class="tool" id="btn-image">🖼️ <span>Photo / Doc</span> <span class="fn">OCR</span></button>
+      </div>
+      <div class="fileinfo" id="fileinfo"></div>
+      <div class="inputrow">
+        <textarea id="input" rows="1" placeholder="Écrivez en wolof ou en français…"></textarea>
+        <div class="side">
+          <label class="switch"><input type="checkbox" id="tts">🔊</label>
+          <select class="tts-select" id="tts-engine">
+            <option value="speecht5">SpeechT5</option>
+            <option value="oolel">Oolel-Voices</option>
+          </select>
+          <button class="btn" id="send" title="Envoyer">➤</button>
+        </div>
+      </div>
+      <div class="examples">
+        <span class="chip" data-q="dama beug wout kayitu juddu ?">🇸🇳 dama beug wout kayitu juddu ?</span>
+        <span class="chip" data-q="dama beug dem batima A?">🇸🇳 dama beug dem batima A?</span>
+        <span class="chip" data-q="Où dois-je déposer ma demande de carte d'identité ?">Où déposer ma demande ?</span>
+        <span class="chip" data-q="Comment créer une entreprise au Sénégal ?">Créer une entreprise ?</span>
+        <span class="chip" data-q="Combien coûte un passeport ?">Coût d'un passeport ?</span>
+      </div>
+    </div>
+
+    <input type="file" id="file-image" accept="image/*" hidden>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const chat = $('chat');
+
+    // ---- état LLM ----
+    (async () => {
+      try {
+        const res = await fetch('/health');
+        const d = await res.json();
+        $('badge-llm').textContent = 'LLM: ' + (d.llm_ready ? d.llm_provider.toUpperCase() + ' ✓' : 'fallback');
+        $('badge-llm').classList.toggle('on', d.llm_ready);
+        if (d.tts_engine) {
+          const sel = $('tts-engine');
+          sel.value = d.tts_engine;
+        }
+      } catch (_) { }
+    })();
+
+    // ---- helpers ----
+    const esc = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    function toast(msg) {
+      const t = $('toast'); t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function addMsg(role, html, extra) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.innerHTML = '<div class="avatar">' + (role === 'user' ? '👤' : '🤖') + '</div><div class="bubble">' + html + '</div>';
+      if (extra) Object.assign(div.style, extra);
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    function addTyping() {
+      const div = document.createElement('div');
+      div.className = 'msg bot';
+      div.id = 'typing';
+      div.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>';
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+    function removeTyping() { const t = $('typing'); if (t) t.remove(); }
+
+    // ---- pipeline trace dans la réponse ----
+    function buildTrace(t) {
+      if (!t) return '';
+      const steps = [];
+      if (t.input_lang) steps.push(['Langue', String(t.input_lang).toUpperCase(), true]);
+      if (t.wolof_to_french) steps.push(['Traduction WO→FR', esc(t.wolof_to_french.query || t.wolof_to_french), true]);
+      if (t.intent) steps.push(['Intention', esc(t.intent), true]);
+      if (t.search) steps.push(['Recherche', esc(t.search), true]);
+      if (t.reranker && t.reranker.input_docs != null) {
+        steps.push(['Reranker', t.reranker.input_docs + ' docs → ' + t.reranker.output_docs + ' docs', true]);
+      }
+      if (t.french_to_wolof) steps.push(['Traduction FR→WO', esc(String(t.french_to_wolof.seconds ?? t.french_to_wolof)) + 's', true]);
+      if (!steps.length) return '';
+      return '<div class="trace">' + steps.map(s =>
+        '<div class="step done"><span class="dot"></span><b>' + s[0] + ':</b> <span class="val">' + s[1] + '</span></div>'
+      ).join('') + '</div>';
+    }
+
+    function renderAnswer(data) {
+      if (!data || typeof data !== 'object') {
+        addMsg('bot', '❌ Réponse invalide du serveur');
+        return;
+      }
+      const t = data.trace || {};
+      const isWo = t.input_lang === 'wo';
+      const langTag = '<span class="lang-tag">' + (isWo ? 'Réponse en wolof 🇸🇳' : 'Réponse en français') + '</span>';
+
+      let html = langTag;
+      if (data.response_fr && data.response_wo) {
+        html += '<div class="original">FR : ' + esc(data.response_fr) + '</div>';
+      }
+      const mainText = data.response || data.response_fr || data.answer || data.text || '';
+      html += '<div>' + esc(mainText) + '</div>';
+
+      if (data.audio) {
+        html += '<audio class="audio" controls src="/static/response.wav?' + Date.now() + '"></audio>';
+      }
+      html += buildTrace(t);
+      if (t.context) html += '<div class="context">📄 Contexte : ' + esc(String(t.context).slice(0, 400)) + '</div>';
+      addMsg('bot', html);
+    }
+
+    // ---- envoi texte ----
+    async function sendText(text, tts) {
+      if (!text.trim()) return;
+      addMsg('user', esc(text));
+      $('input').value = '';
+      autoGrow();
+      addTyping();
+      try {
+        const res = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: text,
+            tts,
+            tts_engine: $('tts-engine').value
+          })
+        });
+        const data = await res.json();
+        removeTyping();
+        if (!res.ok) { addMsg('bot', '❌ ' + esc(data.detail || 'Erreur')); return; }
+        renderAnswer(data);
+      } catch (e) {
+        removeTyping();
+        addMsg('bot', '❌ Erreur réseau : ' + esc(e.message));
+      }
+    }
+
+    // ---- envoi fichier ----
+    async function sendFile(endpoint, file, loadingLabel) {
+      addMsg('user', '📎 <em>' + esc(file.name) + '</em>');
+      addTyping();
+      toast(loadingLabel);
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('tts', $('tts').checked);
+      fd.append('tts_engine', $('tts-engine').value);
+      try {
+        const res = await fetch(endpoint, { method: 'POST', body: fd });
+        const data = await res.json();
+        removeTyping();
+        if (!res.ok) { addMsg('bot', '❌ ' + esc(data.detail || 'Erreur')); return; }
+        renderAnswer(data);
+      } catch (e) {
+        removeTyping();
+        addMsg('bot', '❌ Erreur réseau : ' + esc(e.message));
+      }
+    }
+
+    // ---- events ----
+    $('send').addEventListener('click', () => sendText($('input').value, $('tts').checked));
+    $('input').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('send').click(); }
+    });
+    $('input').addEventListener('input', autoGrow);
+    function autoGrow() {
+      const el = $('input');
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+      $('input').value = c.dataset.q;
+      autoGrow();
+      $('input').focus();
+    }));
+
+    function bindFile(btnId, inputId, accept, action) {
+      const btn = $(btnId), input = $(inputId);
+      input.accept = accept;
+      btn.addEventListener('click', () => input.click());
+      input.addEventListener('change', () => {
+        const f = input.files[0];
+        if (!f) return;
+        $('fileinfo').textContent = 'Fichier prêt : ' + f.name + ' (' + (f.size / 1024).toFixed(0) + ' Ko)';
+        $('fileinfo').classList.add('show');
+        action(f);
+        input.value = '';
+      });
+    }
+    bindFile('btn-image', 'file-image', 'image/*',
+      f => sendFile('/ask/image', f, 'Extraction OCR en cours…'));
+
+    // ---- Enregistrement micro (MediaRecorder) ----
+    const recBtn = $('btn-audio'), recTimer = $('rec-timer');
+    let mediaRecorder = null, chunks = [], recStart = 0, recTimerId = null;
+
+    function fmtTime(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60), r = s % 60;
+      return m + ':' + String(r).padStart(2, '0');
+    }
+
+    async function toggleRecord() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        toast('Micro non supporté par ce navigateur');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        chunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          stream.getTracks().forEach(t => t.stop());
+          recBtn.classList.remove('rec');
+          recTimer.textContent = 'micro';
+          clearInterval(recTimerId);
+          const file = new File([blob], 'microphone.' + (mediaRecorder.mimeType.includes('mp4') ? 'm4a' : 'webm'), { type: mediaRecorder.mimeType || 'audio/webm' });
+          sendFile('/ask/audio', file, 'Transcription vocale en cours…');
+        };
+        mediaRecorder.start();
+        recStart = Date.now();
+        recTimer.textContent = '0:00';
+        recBtn.classList.add('rec');
+        recTimerId = setInterval(() => recTimer.textContent = fmtTime(Date.now() - recStart), 250);
+        toast('🎙️ Enregistrement… recliquez pour arrêter');
+      } catch (e) {
+        toast('❌ Micro inaccessible : ' + e.message);
+      }
+    }
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+    }
+
+    recBtn.addEventListener('click', toggleRecord);
+
+    // message de bienvenue
+    addMsg('bot',
+      '<span class="lang-tag">Assistant administratif sénégalais — V2</span>' +
+      'Salam aléikum ! 👋 Je vous aide pour vos démarches administratives.<br>' +
+      'Posez votre question en <b>wolof</b> ou en <b>français</b> : tapez, <b>parlez dans le micro</b> 🎙️ ou envoyez une photo.');
+  </script>
+</body>
+
+</html>

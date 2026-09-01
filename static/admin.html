@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TontumaBot V3 — Admin RAG</title>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --card: rgba(255, 255, 255, .04);
+            --border: rgba(255, 255, 255, .1);
+            --text: #e8edf9;
+            --muted: #94a0c0;
+            --green: #22d39a;
+            --green2: #0ea87a;
+            --accent: #4f7cff;
+            --red: #ff5c7a;
+            --r: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: radial-gradient(1200px 600px at 85% -10%, rgba(79, 124, 255, .16), transparent 60%),
+                radial-gradient(800px 500px at 5% 110%, rgba(34, 211, 154, .1), transparent 60%), var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 28px 16px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px
+        }
+
+        /* header */
+        header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 22px
+        }
+
+        .logo {
+            width: 46px;
+            height: 46px;
+            border-radius: 13px;
+            background: linear-gradient(135deg, var(--green), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+            font-weight: 800;
+            color: #fff;
+            box-shadow: 0 8px 30px rgba(79, 124, 255, .4);
+            flex-shrink: 0
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 2px
+        }
+
+        .hright {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .stats {
+            display: flex;
+            gap: 10px
+        }
+
+        .stat {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px 14px;
+            text-align: center
+        }
+
+        .stat .n {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--green)
+        }
+
+        .stat .l {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 13px
+        }
+
+        .link:hover {
+            text-decoration: underline
+        }
+
+        /* card */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            margin-bottom: 18px
+        }
+
+        .card h2 {
+            font-size: 15px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        /* boutons */
+        .btn {
+            background: linear-gradient(135deg, var(--green), var(--green2));
+            color: #04231a;
+            font-weight: 700;
+            border: none;
+            border-radius: 12px;
+            padding: 11px 18px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .2s
+        }
+
+        .btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px)
+        }
+
+        .btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+            transform: none
+        }
+
+        .btn.danger {
+            background: rgba(255, 92, 122, .15);
+            color: var(--red);
+            border: 1px solid rgba(255, 92, 122, .4)
+        }
+
+        /* zone de dépôt multi-fichiers */
+        .drop {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 36px 20px;
+            text-align: center;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all .2s;
+            position: relative;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px
+        }
+
+        .drop:hover,
+        .drop.drag {
+            border-color: var(--accent);
+            background: rgba(79, 124, 255, .06);
+            color: var(--text)
+        }
+
+        .drop .drop-icon {
+            font-size: 32px
+        }
+
+        .drop b {
+            color: var(--accent)
+        }
+
+        .drop .hint {
+            font-size: 11px;
+            color: var(--muted)
+        }
+
+        /* liste de fichiers sélectionnés */
+        .file-list {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, .2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 12px
+        }
+
+        .file-item .fname {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text)
+        }
+
+        .file-item .fsize {
+            color: var(--muted);
+            flex-shrink: 0
+        }
+
+        .file-item .fstatus {
+            flex-shrink: 0;
+            font-weight: 600
+        }
+
+        .file-item .fstatus.ok {
+            color: var(--green)
+        }
+
+        .file-item .fstatus.err {
+            color: var(--red)
+        }
+
+        .file-item .fstatus.pending {
+            color: var(--muted)
+        }
+
+        .file-item .fremove {
+            background: none;
+            border: none;
+            color: var(--red);
+            cursor: pointer;
+            opacity: .6;
+            font-size: 14px;
+            padding: 0 4px;
+            transition: opacity .2s
+        }
+
+        .file-item .fremove:hover {
+            opacity: 1
+        }
+
+        /* progress batch */
+        .progress-bar-wrap {
+            margin-top: 12px;
+            background: rgba(0, 0, 0, .25);
+            border-radius: 999px;
+            height: 6px;
+            overflow: hidden;
+            display: none
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--green), var(--accent));
+            transition: width .3s;
+            width: 0%
+        }
+
+        .progress-label {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 6px;
+            text-align: center;
+            display: none
+        }
+
+        /* champ texte */
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px
+        }
+
+        @media(max-width:700px) {
+            .grid2 {
+                grid-template-columns: 1fr
+            }
+        }
+
+        textarea,
+        input[type=text] {
+            width: 100%;
+            background: rgba(0, 0, 0, .25);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            padding: 12px;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border .2s
+        }
+
+        textarea:focus,
+        input:focus {
+            outline: none;
+            border-color: var(--accent)
+        }
+
+        .label {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin: 12px 0 6px
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            flex-wrap: wrap
+        }
+
+        /* documents indexés */
+        .doc {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            background: rgba(0, 0, 0, .15)
+        }
+
+        .doc .icon {
+            font-size: 20px;
+            flex-shrink: 0
+        }
+
+        .doc .info {
+            flex: 1;
+            min-width: 0
+        }
+
+        .doc .dtitle {
+            font-size: 13.5px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .doc .dmeta {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 2px
+        }
+
+        .doc .del {
+            background: none;
+            border: none;
+            color: var(--red);
+            font-size: 16px;
+            cursor: pointer;
+            opacity: .6;
+            transition: opacity .2s
+        }
+
+        .doc .del:hover {
+            opacity: 1
+        }
+
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 24px;
+            font-size: 13px
+        }
+
+        /* toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a2340;
+            border: 1px solid var(--accent);
+            color: var(--text);
+            padding: 11px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            z-index: 99;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, .4)
+        }
+
+        .toast.show {
+            display: block;
+            animation: pop .2s ease
+        }
+
+        @keyframes pop {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(8px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0)
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <header>
+            <div class="logo">T</div>
+            <div>
+                <h1>TontumaBot V3 — Admin RAG</h1>
+                <div class="sub">Gérez la base documentaire qui alimente le RAG</div>
+            </div>
+            <div class="hright">
+                <div class="stats">
+                    <div class="stat">
+                        <div class="n" id="stat-docs">—</div>
+                        <div class="l">Documents</div>
+                    </div>
+                    <div class="stat">
+                        <div class="n" id="stat-chunks">—</div>
+                        <div class="l">Chunks</div>
+                    </div>
+                </div>
+                <a class="link" href="/" target="_blank">Ouvrir le chat →</a>
+            </div>
+        </header>
+
+        <!-- ── Upload multiple ───────────────────────────────────── -->
+        <div class="card">
+            <h2>📥 Ajouter des documents</h2>
+            <div class="grid2">
+
+                <!-- Colonne gauche : drop zone multi-fichiers -->
+                <div>
+                    <div class="drop" id="drop">
+                        <div class="drop-icon">📂</div>
+                        <div><b>Cliquez</b> ou déposez vos fichiers ici</div>
+                        <div class="hint">TXT · MD · PDF — plusieurs fichiers acceptés</div>
+                    </div>
+                    <input type="file" id="file-input" accept=".txt,.md,.pdf" multiple hidden>
+
+                    <!-- Liste des fichiers sélectionnés -->
+                    <div class="file-list" id="file-list"></div>
+
+                    <!-- Barre de progression batch -->
+                    <div class="progress-bar-wrap" id="prog-wrap">
+                        <div class="progress-bar" id="prog-bar"></div>
+                    </div>
+                    <div class="progress-label" id="prog-label"></div>
+
+                    <div class="row" style="margin-top:14px">
+                        <button class="btn" id="btn-upload-all" style="flex:1" disabled>
+                            Indexer les fichiers sélectionnés
+                        </button>
+                        <button class="btn danger" id="btn-clear-files" style="padding:11px 14px"
+                            title="Vider la liste">✕</button>
+                    </div>
+                </div>
+
+                <!-- Colonne droite : texte brut -->
+                <div>
+                    <div class="label">Ou collez du texte directement</div>
+                    <textarea id="text-input" rows="6"
+                        placeholder="Collez une procédure, un arrêté, un guide…"></textarea>
+                    <div class="label">Titre du document</div>
+                    <input type="text" id="title-input" placeholder="Ex : Procédure passeport biométrique">
+                    <div class="row">
+                        <button class="btn" id="btn-upload-text" style="flex:1">Indexer le texte</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Documents indexés ─────────────────────────────────── -->
+        <div class="card">
+            <h2>🗂️ Documents indexés
+                <button class="btn danger" id="btn-clear-all" style="margin-left:auto;padding:6px 12px;font-size:12px">
+                    Tout vider
+                </button>
+            </h2>
+            <div id="doc-list"></div>
+            <div class="empty" id="empty" style="display:none">
+                Aucun document indexé. Uploadez des fichiers ci-dessus pour alimenter le RAG.
+            </div>
+        </div>
+
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const $ = id => document.getElementById(id);
+        const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        /* ── Toast ──────────────────────────────────────────────────── */
+        function toast(msg, dur = 3500) {
+            const t = $('toast'); t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), dur);
+        }
+
+        /* ── Stats ──────────────────────────────────────────────────── */
+        async function refresh() {
+            try {
+                const res = await fetch('/admin/documents');
+                const data = await res.json();
+                $('stat-docs').textContent = data.documents.length;
+                $('stat-chunks').textContent = data.total_chunks;
+
+                const list = $('doc-list');
+                list.innerHTML = '';
+                $('empty').style.display = data.documents.length ? 'none' : 'block';
+
+                data.documents.forEach(d => {
+                    const div = document.createElement('div');
+                    div.className = 'doc';
+                    const added = d.added ? new Date(d.added).toLocaleString('fr-FR') : '';
+                    div.innerHTML = `
+        <div class="icon">📄</div>
+        <div class="info">
+          <div class="dtitle" title="${esc(d.title)}">${esc(d.title)}</div>
+          <div class="dmeta">${d.chunks} chunks · ${added}</div>
+        </div>
+        <button class="del" title="Supprimer ce document">🗑</button>`;
+                    div.querySelector('.del').addEventListener('click', async () => {
+                        if (!confirm(`Supprimer « ${d.title} » ?`)) return;
+                        const r = await fetch('/admin/documents/' + encodeURIComponent(d.id), { method: 'DELETE' });
+                        if (r.ok) { toast('✅ Document supprimé'); refresh(); }
+                        else toast('❌ Erreur suppression');
+                    });
+                    list.appendChild(div);
+                });
+            } catch (e) {
+                toast('❌ Impossible de charger les documents : ' + e.message);
+            }
+        }
+
+        /* ── Gestion de la liste de fichiers sélectionnés ──────────── */
+        let selectedFiles = []; // tableau de File
+
+        function renderFileList() {
+            const wrap = $('file-list');
+            wrap.innerHTML = '';
+            selectedFiles.forEach((f, i) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.id = 'fi-' + i;
+                const ext = f.name.split('.').pop().toUpperCase();
+                item.innerHTML = `
+      <span style="font-size:16px">${ext === 'PDF' ? '📕' : '📄'}</span>
+      <span class="fname" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="fsize">${(f.size / 1024).toFixed(0)} Ko</span>
+      <span class="fstatus pending" id="fs-${i}">En attente</span>
+      <button class="fremove" data-idx="${i}" title="Retirer">✕</button>`;
+                wrap.appendChild(item);
+            });
+
+            // Retirer un fichier de la liste
+            wrap.querySelectorAll('.fremove').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    selectedFiles.splice(idx, 1);
+                    renderFileList();
+                    updateUploadBtn();
+                });
+            });
+            updateUploadBtn();
+        }
+
+        function updateUploadBtn() {
+            $('btn-upload-all').disabled = selectedFiles.length === 0;
+            $('btn-upload-all').textContent = selectedFiles.length > 0
+                ? `Indexer ${selectedFiles.length} fichier${selectedFiles.length > 1 ? 's' : ''}`
+                : 'Indexer les fichiers sélectionnés';
+        }
+
+        function addFiles(newFiles) {
+            const allowed = new Set(['.txt', '.md', '.pdf']);
+            Array.from(newFiles).forEach(f => {
+                const ext = '.' + f.name.split('.').pop().toLowerCase();
+                if (!allowed.has(ext)) { toast(`⚠️ Format ignoré : ${f.name}`); return; }
+                // Éviter les doublons (même nom + taille)
+                const dup = selectedFiles.some(s => s.name === f.name && s.size === f.size);
+                if (!dup) selectedFiles.push(f);
+            });
+            renderFileList();
+        }
+
+        /* ── Drop zone ──────────────────────────────────────────────── */
+        const dropZone = $('drop');
+        const fileInput = $('file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+        dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('drag'); });
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('drag');
+            if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) { addFiles(fileInput.files); fileInput.value = ''; }
+        });
+
+        /* ── Vider la sélection ─────────────────────────────────────── */
+        $('btn-clear-files').addEventListener('click', () => {
+            selectedFiles = [];
+            renderFileList();
+        });
+
+        /* ── Upload batch ───────────────────────────────────────────── */
+        $('btn-upload-all').addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            const btn = $('btn-upload-all');
+            const progWrap = $('prog-wrap');
+            const progBar = $('prog-bar');
+            const progLabel = $('prog-label');
+
+            btn.disabled = true;
+            progWrap.style.display = 'block';
+            progLabel.style.display = 'block';
+
+            let done = 0, errors = 0;
+
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const f = selectedFiles[i];
+                const statusEl = $('fs-' + i);
+                if (!statusEl) continue;
+
+                statusEl.textContent = '⏳';
+                statusEl.className = 'fstatus pending';
+                progLabel.textContent = `${i + 1} / ${selectedFiles.length} — ${f.name}`;
+
+                const fd = new FormData();
+                fd.append('file', f);
+                fd.append('title', f.name.replace(/\.[^/.]+$/, ''));  // titre = nom sans extension
+
+                try {
+                    const r = await fetch('/admin/documents', { method: 'POST', body: fd });
+                    const d = await r.json();
+                    if (!r.ok) throw new Error(d.detail || 'Erreur serveur');
+                    statusEl.textContent = `✅ ${d.chunks} chunks`;
+                    statusEl.className = 'fstatus ok';
+                    done++;
+                } catch (e) {
+                    statusEl.textContent = '❌ ' + e.message;
+                    statusEl.className = 'fstatus err';
+                    errors++;
+                }
+
+                // Mise à jour barre de progression
+                const pct = Math.round(((i + 1) / selectedFiles.length) * 100);
+                progBar.style.width = pct + '%';
+            }
+
+            progLabel.textContent = `✅ ${done} indexé${done > 1 ? 's' : ''} · ❌ ${errors} erreur${errors > 1 ? 's' : ''}`;
+            toast(`${done} fichier${done > 1 ? 's' : ''} indexé${done > 1 ? 's' : ''}${errors > 0 ? `, ${errors} erreur(s)` : ''}`);
+            btn.disabled = false;
+            refresh();
+        });
+
+        /* ── Upload texte brut ──────────────────────────────────────── */
+        $('btn-upload-text').addEventListener('click', async () => {
+            const text = $('text-input').value.trim();
+            const title = $('title-input').value.trim();
+            if (!text) { toast('⚠️ Collez du texte avant d\'indexer.'); return; }
+
+            const btn = $('btn-upload-text');
+            btn.disabled = true;
+            btn.textContent = 'Indexation en cours…';
+
+            const fd = new FormData();
+            fd.append('text', text);
+            fd.append('title', title || 'Document manuel');
+
+            try {
+                const r = await fetch('/admin/documents', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.detail || 'Erreur');
+                toast(`✅ ${d.chunks} chunks indexés — « ${d.title} »`);
+                $('text-input').value = '';
+                $('title-input').value = '';
+                refresh();
+            } catch (e) {
+                toast('❌ ' + e.message);
+            }
+            btn.disabled = false;
+            btn.textContent = 'Indexer le texte';
+        });
+
+        /* ── Vider toute la base ────────────────────────────────────── */
+        $('btn-clear-all').addEventListener('click', async () => {
+            if (!confirm('Supprimer TOUS les documents de la base vectorielle ?')) return;
+            const r = await fetch('/admin/documents/clear', { method: 'POST' });
+            const d = await r.json();
+            toast(`🗑 Base vidée (${d.deleted_chunks} chunks supprimés)`);
+            refresh();
+        });
+
+        /* ── Init ────────────────────────────────────────────────────── */
+        refresh();
+    </script>
+</body>
+
+</html>
