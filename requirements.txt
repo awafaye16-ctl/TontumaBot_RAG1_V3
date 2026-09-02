@@ -1,10 +1,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  TontumaBot V3 — dépendances
-#  Modèles récupérés depuis HuggingFace Hub au premier appel (pas en local)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Framework ML ─────────────────────────────────────────────────────────────
 torch
+torchaudio
 transformers==4.46.3
 sentencepiece
 accelerate            # requis pour device_map="auto" (LLM local)
@@ -12,9 +12,7 @@ bitsandbytes          # quantification 4bit/8bit (LLM local Qwen)
 safetensors
 
 # ── Traduction NLLB ──────────────────────────────────────────────────────────
-# bilalfaye/nllb-200-distilled-600M-wo-fr-en  (WO→FR)
-# Lahad/nllb200-francais-wolof                (FR→WO)
-# → téléchargés automatiquement via transformers
+# bilalfaye/nllb-200-distilled-600M-wo-fr-en (WO→FR et FR→WO)
 
 # ── STT ───────────────────────────────────────────────────────────────────────
 # M9and2M/whisper-small-wolof — chargé via transformers depuis dossier local
@@ -40,16 +38,14 @@ google-generativeai
 # soynade-research/Oolel-Voices — téléchargé via huggingface_hub.snapshot_download
 huggingface_hub
 soundfile
-edge-tts              # fallback TTS français
+s3tokenizer            # dépendance Oolel-Voices
 diffusers==0.29.0     # dépendance Oolel-Voices
 conformer==0.3.2      # dépendance Oolel-Voices
 omegaconf             # dépendance Oolel-Voices
 scipy
 numpy<2.0
 
-# ── TTS SpeechT5 (fallback) ──────────────────────────────────────────────────
-datasets              # pour le speaker embedding xvector (CMU Arctic)
-
 # ── Divers ───────────────────────────────────────────────────────────────────
 langdetect
 pillow
+qrcode[pil]

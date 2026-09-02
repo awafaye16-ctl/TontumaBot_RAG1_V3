@@ -7,15 +7,22 @@
   <title>TontumaBot V3 — Assistant administratif</title>
   <style>
     :root {
-      --bg: #0b1020;
-      --card: rgba(255, 255, 255, 0.04);
-      --border: rgba(255, 255, 255, 0.1);
-      --text: #e8edf9;
-      --muted: #94a0c0;
-      --green: #22d39a;
-      --green2: #0ea87a;
-      --accent: #4f7cff;
-      --radius: 16px;
+      --bg: #060a14;
+      --card: rgba(255, 255, 255, 0.045);
+      --card-hover: rgba(255, 255, 255, 0.085);
+      --border: rgba(255, 255, 255, 0.09);
+      --border-strong: rgba(255, 255, 255, 0.18);
+      --text: #eaf0ff;
+      --muted: #8b96b8;
+      --green: #2ee6a6;
+      --green2: #10b981;
+      --accent: #5b8cff;
+      --accent2: #7c6cff;
+      --danger: #ff5c7a;
+      --radius: 18px;
+      --radius-sm: 12px;
+      --shadow: 0 16px 50px rgba(0, 0, 0, 0.45);
+      --shadow-soft: 0 4px 18px rgba(0, 0, 0, 0.28);
     }
 
     * {
@@ -25,16 +32,19 @@
     }
 
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(79, 124, 255, 0.18), transparent 60%),
-        radial-gradient(800px 500px at 10% 110%, rgba(34, 211, 154, 0.12), transparent 60%),
+        radial-gradient(1000px 560px at 85% -12%, rgba(91, 140, 255, 0.20), transparent 62%),
+        radial-gradient(760px 480px at 6% 112%, rgba(46, 230, 166, 0.14), transparent 60%),
         var(--bg);
       color: var(--text);
       height: 100vh;
       display: flex;
       justify-content: center;
       overflow: hidden;
+      letter-spacing: 0.1px;
     }
 
     .app {
@@ -50,27 +60,31 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      padding-bottom: 14px;
+      padding: 4px 4px 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
     }
 
     .logo {
       width: 46px;
       height: 46px;
-      border-radius: 13px;
-      background: linear-gradient(135deg, var(--green), var(--accent));
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--green), var(--accent) 92%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 23px;
+      font-size: 22px;
       font-weight: 800;
       color: #fff;
-      box-shadow: 0 8px 30px rgba(79, 124, 255, 0.4);
+      box-shadow: 0 10px 30px rgba(91, 140, 255, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
       flex-shrink: 0;
     }
 
     h1 {
       font-size: 19px;
-      font-weight: 700;
+      font-weight: 750;
+      letter-spacing: -0.2px;
     }
 
     .sub {
@@ -86,17 +100,38 @@
     }
 
     .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: 11px;
+      font-weight: 500;
       padding: 5px 11px;
       border-radius: 999px;
       background: var(--card);
       border: 1px solid var(--border);
       color: var(--muted);
+      backdrop-filter: blur(8px);
+    }
+
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      opacity: .5;
     }
 
     .badge.on {
       color: var(--green);
-      border-color: rgba(34, 211, 154, 0.4);
+      border-color: rgba(46, 230, 166, 0.35);
+      background: rgba(46, 230, 166, 0.08);
+    }
+
+    .badge.on::before {
+      background: var(--green);
+      opacity: 1;
+      box-shadow: 0 0 8px rgba(46, 230, 166, 0.8);
     }
 
     /* ---- Chat ---- */
@@ -117,6 +152,10 @@
     .chat::-webkit-scrollbar-thumb {
       background: var(--border);
       border-radius: 3px;
+    }
+
+    .chat::-webkit-scrollbar-thumb:hover {
+      background: var(--border-strong);
     }
 
     .msg {
@@ -152,6 +191,8 @@
       align-items: center;
       justify-content: center;
       font-size: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
     }
 
     .msg.user .avatar {
@@ -165,16 +206,20 @@
     .bubble {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 12px 14px;
-      line-height: 1.6;
+      border-radius: 16px;
+      border-top-left-radius: 5px;
+      padding: 12px 15px;
+      line-height: 1.62;
       font-size: 14px;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow-soft);
     }
 
     .msg.user .bubble {
-      background: rgba(79, 124, 255, 0.14);
-      border-color: rgba(79, 124, 255, 0.35);
+      background: linear-gradient(135deg, rgba(91, 140, 255, 0.20), rgba(124, 108, 255, 0.16));
+      border-color: rgba(91, 140, 255, 0.38);
+      border-radius: 16px;
+      border-top-right-radius: 5px;
     }
 
     .bubble .lang-tag {
@@ -288,7 +333,13 @@
 
     /* ---- Saisie ---- */
     .composer {
-      padding: 14px 0 18px;
+      padding: 14px;
+      margin: 6px 0 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
     }
 
     .tools {
@@ -315,8 +366,10 @@
     }
 
     .tool:hover {
-      border-color: var(--accent);
+      border-color: var(--border-strong);
+      background: var(--card-hover);
       color: var(--text);
+      transform: translateY(-1px);
     }
 
     .tool .fn {
@@ -355,26 +408,33 @@
 
     textarea {
       flex: 1;
-      background: rgba(0, 0, 0, 0.25);
+      background: rgba(0, 0, 0, 0.28);
       border: 1px solid var(--border);
       border-radius: 14px;
       color: var(--text);
-      padding: 13px 14px;
+      padding: 13px 15px;
       font-size: 14px;
       font-family: inherit;
+      line-height: 1.5;
       resize: none;
       max-height: 120px;
-      transition: border .2s;
+      transition: border .2s, box-shadow .2s;
+    }
+
+    textarea::placeholder {
+      color: var(--muted);
+      opacity: .7;
     }
 
     textarea:focus {
       outline: none;
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.15);
     }
 
     .btn {
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      color: #04231a;
+      background: linear-gradient(135deg, var(--green), var(--accent));
+      color: #fff;
       font-weight: 700;
       border: none;
       border-radius: 14px;
@@ -383,12 +443,19 @@
       font-size: 18px;
       cursor: pointer;
       flex-shrink: 0;
-      transition: transform .15s, filter .2s;
+      box-shadow: 0 8px 22px rgba(91, 140, 255, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      transition: transform .15s, filter .2s, box-shadow .2s;
     }
 
     .btn:hover {
-      filter: brightness(1.1);
-      transform: translateY(-1px);
+      filter: brightness(1.08);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(91, 140, 255, 0.5);
+    }
+
+    .btn:active {
+      transform: translateY(0);
     }
 
     .btn:disabled {
@@ -448,7 +515,7 @@
 
     .chip {
       font-size: 11.5px;
-      padding: 6px 11px;
+      padding: 7px 12px;
       border-radius: 999px;
       background: var(--card);
       border: 1px solid var(--border);
@@ -458,8 +525,10 @@
     }
 
     .chip:hover {
-      border-color: var(--accent);
+      border-color: var(--border-strong);
+      background: var(--card-hover);
       color: var(--text);
+      transform: translateY(-1px);
     }
 
     .fileinfo {
@@ -478,15 +547,16 @@
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
-      background: #1a2340;
-      border: 1px solid var(--accent);
+      background: rgba(20, 27, 48, 0.92);
+      border: 1px solid rgba(91, 140, 255, 0.5);
       color: var(--text);
-      padding: 10px 18px;
+      padding: 11px 20px;
       border-radius: 12px;
       font-size: 13px;
       z-index: 50;
       display: none;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, .4);
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow);
     }
 
     .toast.show {
@@ -518,11 +588,12 @@
         <h1>TontumaBot</h1>
         <div class="sub">Assistant administratif — Wolof · Français · RAG</div>
       </div>
-      <div class="badges">
-        <span class="badge" id="badge-llm">LLM: —</span>
-        <span class="badge" id="badge-lang">Détecteur actif</span>
-        <span class="badge on" id="badge-v2">V2 — Reranker</span>
-      </div>
+<div class="badges">
+      <span class="badge" id="badge-llm">LLM: —</span>
+      <span class="badge" id="badge-lang">Détecteur actif</span>
+      <span class="badge on" id="badge-v2">V3 — Reranker</span>
+      <span class="badge on" id="badge-sse">REST + SSE</span>
+    </div>
     </header>
 
     <div class="chat" id="chat"></div>
@@ -537,9 +608,9 @@
       <div class="inputrow">
         <textarea id="input" rows="1" placeholder="Écrivez en wolof ou en français…"></textarea>
         <div class="side">
-          <label class="switch"><input type="checkbox" id="tts">🔊</label>
+          <label class="switch"><input type="checkbox" id="tts" checked>🔊</label>
           <select class="tts-select" id="tts-engine">
-            <option value="speecht5">SpeechT5</option>
+            <!-- <option value="speecht5">SpeechT5</option> -->
             <option value="oolel">Oolel-Voices</option>
           </select>
           <button class="btn" id="send" title="Envoyer">➤</button>
@@ -547,7 +618,7 @@
       </div>
       <div class="examples">
         <span class="chip" data-q="dama beug wout kayitu juddu ?">🇸🇳 dama beug wout kayitu juddu ?</span>
-        <span class="chip" data-q="dama beug dem batima A?">🇸🇳 dama beug dem batima A?</span>
+        <span class="chip" data-q="dama beug wout acte de deces?">🇸🇳 dama beug wout acte de deces?</span>
         <span class="chip" data-q="Où dois-je déposer ma demande de carte d'identité ?">Où déposer ma demande ?</span>
         <span class="chip" data-q="Comment créer une entreprise au Sénégal ?">Créer une entreprise ?</span>
         <span class="chip" data-q="Combien coûte un passeport ?">Coût d'un passeport ?</span>
@@ -608,13 +679,24 @@
       if (!t) return '';
       const steps = [];
       if (t.input_lang) steps.push(['Langue', String(t.input_lang).toUpperCase(), true]);
-      if (t.wolof_to_french) steps.push(['Traduction WO→FR', esc(t.wolof_to_french.query || t.wolof_to_french), true]);
+      if (t.wolof_to_french) {
+        const wtf = t.wolof_to_french;
+        const label = wtf.result ? esc(wtf.result) : (wtf.latency_ms ? wtf.latency_ms + 'ms' : 'ok');
+        steps.push(['Traduction WO→FR', label, true]);
+      }
       if (t.intent) steps.push(['Intention', esc(t.intent), true]);
-      if (t.search) steps.push(['Recherche', esc(t.search), true]);
+      if (t.retrieval) {
+        const r = t.retrieval;
+        steps.push(['Recherche', r.n_candidates + ' candidats → ' + (r.n_reranked || r.n_mmr || 0) + ' retenus', true]);
+      }
       if (t.reranker && t.reranker.input_docs != null) {
         steps.push(['Reranker', t.reranker.input_docs + ' docs → ' + t.reranker.output_docs + ' docs', true]);
       }
-      if (t.french_to_wolof) steps.push(['Traduction FR→WO', esc(String(t.french_to_wolof.seconds ?? t.french_to_wolof)) + 's', true]);
+      if (t.french_to_wolof) {
+        const ftw = t.french_to_wolof;
+        const label = ftw.latency_ms ? ftw.latency_ms + 'ms' : 'ok';
+        steps.push(['Traduction FR→WO', label, true]);
+      }
       if (!steps.length) return '';
       return '<div class="trace">' + steps.map(s =>
         '<div class="step done"><span class="dot"></span><b>' + s[0] + ':</b> <span class="val">' + s[1] + '</span></div>'
@@ -637,15 +719,77 @@
       const mainText = data.response || data.response_fr || data.answer || data.text || '';
       html += '<div>' + esc(mainText) + '</div>';
 
-      if (data.audio) {
-        html += '<audio class="audio" controls src="/static/response.wav?' + Date.now() + '"></audio>';
+      if (data.audio_url) {
+        html += '<audio class="audio" controls src="' + esc(data.audio_url) + '?' + Date.now() + '"></audio>';
       }
+
+      // QR Code pour les procédures
+      if (data.qr_code) {
+        html += '<div class="qr-code" style="margin-top:12px;text-align:center;">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">📱 Scannez pour sauvegarder la procédure</div>' +
+          '<img src="data:image/png;base64,' + data.qr_code + '" alt="QR Code procédure" style="max-width:200px;border:1px solid var(--border);border-radius:8px;background:white;padding:8px;">' +
+          '</div>';
+      }
+
       html += buildTrace(t);
       if (t.context) html += '<div class="context">📄 Contexte : ' + esc(String(t.context).slice(0, 400)) + '</div>';
       addMsg('bot', html);
     }
 
-    // ---- envoi texte ----
+    // ---- Client SSE (Server-Sent Events) ----
+    // Libellés d'étape affichés pendant le streaming de la réponse.
+    const STEP_LABELS = {
+      start:         '⏳ Démarrage…',
+      stt:           '🎙️ Transcription…',
+      detect:        '🌐 Détection de la langue…',
+      translate_in:  '🔄 Traduction WO→FR…',
+      intent:        '🧭 Analyse de l’intention…',
+      retrieval:     '🔍 Recherche documentaire…',
+      llm:           '🤖 Génération de la réponse…',
+      translate_out: '🔄 Traduction FR→WO…',
+      tts:           '🔊 Synthèse vocale…',
+    };
+
+    function updateTyping(step) {
+      const b = document.querySelector('#typing .bubble');
+      if (!b) return;
+      const label = STEP_LABELS[step] || esc(step);
+      b.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:6px;">' + label + '</div>';
+    }
+
+    // Consomme un flux SSE (event: <nom>\ndata: <json>\n\n) et route les événements.
+    async function consumeSSE(res, { onStatus, onResult, onError }) {
+      if (!res.body) { onError('Réponse sans flux'); return; }
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('text/event-stream')) {
+        // Erreur renvoyée en JSON (400/404/500) plutôt qu'en SSE
+        let msg = 'Erreur ' + res.status;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        onError(msg);
+        return;
+      }
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop();                 // fragment incomplet conservé
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+          const ev = (block.match(/^event: (.*)$/m) || [])[1] || 'message';
+          let data = {};
+          try { data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || '{}'); } catch (_) {}
+          if (ev === 'status')      onStatus && onStatus(data);
+          else if (ev === 'result') onResult && onResult(data);
+          else if (ev === 'error')  onError  && onError(data.message || 'Erreur');
+          // 'done' → fin du flux, rien à faire
+        }
+      }
+    }
+
     async function sendText(text, tts) {
       if (!text.trim()) return;
       addMsg('user', esc(text));
@@ -656,23 +800,20 @@
         const res = await fetch('/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: text,
-            tts,
-            tts_engine: $('tts-engine').value
-          })
+          body: JSON.stringify({ question: text, tts })
         });
-        const data = await res.json();
-        removeTyping();
-        if (!res.ok) { addMsg('bot', '❌ ' + esc(data.detail || 'Erreur')); return; }
-        renderAnswer(data);
+        await consumeSSE(res, {
+          onStatus: d => updateTyping(d.step),
+          onResult: d => { removeTyping(); renderAnswer(d); },
+          onError:  m => { removeTyping(); addMsg('bot', '❌ ' + esc(m)); },
+        });
       } catch (e) {
         removeTyping();
         addMsg('bot', '❌ Erreur réseau : ' + esc(e.message));
       }
     }
 
-    // ---- envoi fichier ----
+    // ---- envoi fichier (réponse en SSE) ----
     async function sendFile(endpoint, file, loadingLabel) {
       addMsg('user', '📎 <em>' + esc(file.name) + '</em>');
       addTyping();
@@ -680,13 +821,13 @@
       const fd = new FormData();
       fd.append('file', file);
       fd.append('tts', $('tts').checked);
-      fd.append('tts_engine', $('tts-engine').value);
       try {
         const res = await fetch(endpoint, { method: 'POST', body: fd });
-        const data = await res.json();
-        removeTyping();
-        if (!res.ok) { addMsg('bot', '❌ ' + esc(data.detail || 'Erreur')); return; }
-        renderAnswer(data);
+        await consumeSSE(res, {
+          onStatus: d => updateTyping(d.step),
+          onResult: d => { removeTyping(); renderAnswer(d); },
+          onError:  m => { removeTyping(); addMsg('bot', '❌ ' + esc(m)); },
+        });
       } catch (e) {
         removeTyping();
         addMsg('bot', '❌ Erreur réseau : ' + esc(e.message));
@@ -775,9 +916,10 @@
 
     // message de bienvenue
     addMsg('bot',
-      '<span class="lang-tag">Assistant administratif sénégalais — V2</span>' +
+      '<span class="lang-tag">Assistant administratif sénégalais — V3</span>' +
       'Salam aléikum ! 👋 Je vous aide pour vos démarches administratives.<br>' +
-      'Posez votre question en <b>wolof</b> ou en <b>français</b> : tapez, <b>parlez dans le micro</b> 🎙️ ou envoyez une photo.');
+      'Posez votre question en <b>wolof</b> ou en <b>français</b> : tapez, <b>parlez dans le micro</b> 🎙️ ou envoyez une photo.<br>' +
+      '<small style="color:var(--muted)">Mode: <b>REST + SSE</b> (réponse en streaming)</small>');
   </script>
 </body>
 

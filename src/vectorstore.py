@@ -27,6 +27,7 @@ DB_DIR      = os.path.join(settings.BASE_DIR, "data", "chroma")
 _embedder   = None
 _client     = None
 _collection = None
+_corpus     = None   # cache : corpus complet + index BM25 (invalidé à l'écriture)
 
 
 # =============================================================================
@@ -48,6 +49,57 @@ def _embed(texts: list[str]) -> list[list[float]]:
 
 def _embed_single(text: str) -> list[float]:
     return _embed([text])[0]
+
+
+def embed_query(text: str) -> list[float]:
+    """Embedding normalisé de la requête (à calculer une seule fois par question)."""
+    return _embed_single(text)
+
+
+# =============================================================================
+#  Cache du corpus (index BM25 + embeddings) — reconstruit uniquement à l'écriture
+# =============================================================================
+
+def _get_corpus() -> dict:
+    """Charge une seule fois le corpus complet depuis ChromaDB et construit
+    l'index BM25. Réutilisé pour toutes les requêtes jusqu'à la prochaine
+    écriture (add/delete/clear), qui invalide le cache via `_invalidate_corpus`.
+
+    Évite de recharger tous les documents et de reconstruire l'index BM25 à
+    chaque question (auparavant fait 2× par requête).
+    """
+    global _corpus
+    if _corpus is not None:
+        return _corpus
+
+    coll = get_collection()
+    data = coll.get(include=["documents", "metadatas", "embeddings"])
+    ids   = data["ids"]
+    texts = data["documents"]
+    metas = data["metadatas"]
+
+    embeddings = data.get("embeddings")
+    embeddings = np.asarray(embeddings) if embeddings is not None and len(embeddings) else None
+
+    bm25 = None
+    if texts:
+        from retrieval.hybrid import HybridRetriever
+        bm25 = HybridRetriever(texts)
+
+    _corpus = {
+        "ids":        ids,
+        "texts":      texts,
+        "metas":      metas,
+        "embeddings": embeddings,
+        "bm25":       bm25,
+        "id_to_pos":  {cid: i for i, cid in enumerate(ids)},
+    }
+    return _corpus
+
+
+def _invalidate_corpus() -> None:
+    global _corpus
+    _corpus = None
 
 
 # =============================================================================
@@ -104,6 +156,7 @@ def add_documents(chunks: list[str], metadatas: list[dict]) -> int:
     ]
     embeddings = _embed(chunks)
     coll.upsert(ids=ids, documents=chunks, embeddings=embeddings, metadatas=metadatas)
+    _invalidate_corpus()
     return len(chunks)
 
 
@@ -148,6 +201,7 @@ def hybrid_search(
     query: str,
     k: int   = 10,
     alpha: float = 0.4,
+    query_embedding: Optional[list[float]] = None,
 ) -> list[tuple[str, str, float, dict]]:
     """Fusionne BM25 (lexical) et vectoriel (sémantique).
 
@@ -156,32 +210,40 @@ def hybrid_search(
     alpha = 0.4 → légère préférence au sémantique (meilleur sur les questions
     administratives paraphrasées).
 
+    L'index BM25 et les embeddings du corpus sont mis en cache (`_get_corpus`) :
+    ils ne sont pas reconstruits à chaque requête. L'embedding de la requête peut
+    être fourni via `query_embedding` pour éviter de le recalculer.
+
     Returns:
         Liste de (chunk_id, texte, score_fusionné, metadata), top-K.
     """
-    coll = get_collection()
-    if coll.count() == 0:
+    corpus = _get_corpus()
+    ids, texts, metas = corpus["ids"], corpus["texts"], corpus["metas"]
+    if not ids:
         return []
 
-    from retrieval.hybrid import HybridRetriever
+    # ── BM25 (index caché) ────────────────────────────────────────────────
+    bm25_scores = dict(corpus["bm25"]._bm25_search(query, k=k * 3))
 
-    all_data  = coll.get(include=["documents", "metadatas"])
-    ids       = all_data["ids"]
-    texts     = all_data["documents"]
-    metas     = all_data["metadatas"]
-
-    # BM25 sur tous les chunks
-    retriever  = HybridRetriever(texts)
-    bm25_scores = dict(retriever._bm25_search(query, k=k * 3))
-
-    # Vectoriel
-    id_to_pos  = {cid: i for i, cid in enumerate(ids)}
+    # ── Vectoriel (embeddings cachés, similarité cosinus = produit scalaire
+    #    car les vecteurs sont normalisés) ──────────────────────────────────
     vec_scores = {}
-    for cid, _, s, _ in vector_search(query, k=k * 3):
-        if cid in id_to_pos:
-            vec_scores[id_to_pos[cid]] = s
+    embeddings = corpus["embeddings"]
+    if embeddings is not None:
+        if query_embedding is None:
+            query_embedding = _embed_single(query)
+        sims  = embeddings @ np.asarray(query_embedding)
+        top_n = min(k * 3, len(sims))
+        for idx in np.argpartition(sims, -top_n)[-top_n:]:
+            vec_scores[int(idx)] = float(sims[idx])
+    else:
+        # Corpus sans embeddings en cache → repli sur la requête ChromaDB
+        id_to_pos = corpus["id_to_pos"]
+        for cid, _, s, _ in vector_search(query, k=k * 3):
+            if cid in id_to_pos:
+                vec_scores[id_to_pos[cid]] = s
 
-    # Fusion
+    # ── Fusion ────────────────────────────────────────────────────────────
     results = []
     for idx in set(bm25_scores) | set(vec_scores):
         s_b = bm25_scores.get(idx, 0.0)
@@ -196,24 +258,22 @@ def hybrid_search(
 #  MMR — Maximum Marginal Relevance
 # =============================================================================
 
-def mmr_search(
-    query: str,
-    k: int      = 5,
-    fetch_k: int = 20,
+def mmr_from_candidates(
+    candidates: list[tuple[str, str, float, dict]],
+    query_embedding: list[float],
+    k: int = 5,
     lambda_mmr: float = 0.6,
 ) -> list[tuple[str, str, float, dict]]:
-    """Récupère fetch_k candidats par hybride puis sélectionne k chunks
-    par MMR pour maximiser pertinence et diversité.
+    """Applique le MMR sur des candidats DÉJÀ récupérés (pas de nouvelle recherche).
 
     MMR(d) = lambda * sim(query, d) - (1 - lambda) * max_sim(d, already_selected)
 
-    lambda_mmr = 0.6 : légèrement biaisé vers la pertinence,
-                       mais avec bonne diversité (évite les chunks redondants).
+    Les vecteurs des candidats sont récupérés depuis le cache d'embeddings du
+    corpus (`_get_corpus`) ; on ne les ré-encode donc pas.
 
     Returns:
         Liste de (chunk_id, texte, score_mmr, metadata), k éléments distincts.
     """
-    candidates = hybrid_search(query, k=fetch_k)
     if not candidates:
         return []
 
@@ -227,10 +287,18 @@ def mmr_search(
             deduped.append(item)
     candidates = deduped
 
-    embedder    = get_embedder()
-    q_vec       = np.array(embedder.encode([query], normalize_embeddings=True)[0])
-    cand_texts  = [c[1] for c in candidates]
-    cand_vecs   = embedder.encode(cand_texts, normalize_embeddings=True)
+    q_vec     = np.asarray(query_embedding)
+    corpus    = _get_corpus()
+    id_to_pos = corpus["id_to_pos"]
+    emb       = corpus["embeddings"]
+
+    # Vecteurs des candidats : depuis le cache si possible, sinon ré-encodage
+    if emb is not None and all(c[0] in id_to_pos for c in candidates):
+        cand_vecs = np.stack([emb[id_to_pos[c[0]]] for c in candidates])
+    else:
+        cand_vecs = get_embedder().encode(
+            [c[1] for c in candidates], normalize_embeddings=True
+        )
 
     selected_idx  : list[int]   = []
     selected_vecs : list[np.ndarray] = []
@@ -262,6 +330,24 @@ def mmr_search(
         (candidates[i][0], candidates[i][1], float(np.dot(q_vec, cand_vecs[i])), candidates[i][3])
         for i in selected_idx
     ]
+
+
+def mmr_search(
+    query: str,
+    k: int      = 5,
+    fetch_k: int = 20,
+    lambda_mmr: float = 0.6,
+    query_embedding: Optional[list[float]] = None,
+) -> list[tuple[str, str, float, dict]]:
+    """Récupère fetch_k candidats par hybride puis sélectionne k chunks par MMR.
+
+    Wrapper de compatibilité : effectue UN seul `hybrid_search` puis délègue à
+    `mmr_from_candidates`. L'embedding de la requête est calculé une seule fois.
+    """
+    if query_embedding is None:
+        query_embedding = _embed_single(query)
+    candidates = hybrid_search(query, k=fetch_k, query_embedding=query_embedding)
+    return mmr_from_candidates(candidates, query_embedding, k=k, lambda_mmr=lambda_mmr)
 
 
 # =============================================================================
@@ -309,6 +395,7 @@ def delete_document(document_id: str) -> int:
     ids  = data["ids"]
     if ids:
         coll.delete(ids=ids)
+        _invalidate_corpus()
     return len(ids)
 
 
@@ -317,6 +404,7 @@ def clear_all() -> int:
     n    = coll.count()
     if n:
         coll.delete(ids=coll.get()["ids"])
+        _invalidate_corpus()
     return n
 
 

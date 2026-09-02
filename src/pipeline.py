@@ -20,7 +20,8 @@ Flux complet :
   │    ↓                                                                │
   │  Si WO → traduction FR→WO  [Lahad/nllb]                            │
   │    ↓ TTS si demandé  [Oolel-Voices → SpeechT5 → edge-tts]         │
-  │  Réponse JSON  { response, response_fr, response_wo?, audio? }     │
+  │    ↓ QR Code si procédure                                           │
+  │  Réponse JSON  { response, response_fr, response_wo?, audio?, qr_code? }
   └─────────────────────────────────────────────────────────────────────┘
 
 Trace complète :
@@ -29,11 +30,14 @@ Trace complète :
   - chunks candidats, MMR sélectionnés, scores reranker
   - contexte envoyé au LLM
   - TTS utilisé
+  - QR Code généré (si procédure)
   - métriques de latence par étape
 """
 import re
 import time
-from typing import Optional
+import base64
+from io import BytesIO
+from typing import Callable, Optional
 
 import vectorstore
 from language.detector import detect_language
@@ -41,6 +45,38 @@ from translation.nllb import wolof_to_french, french_to_wolof
 from intent.router import detect_intent
 from retrieval.reranker import rerank
 from generation.llm import generate
+
+try:
+    import qrcode
+    from PIL import Image
+    QR_AVAILABLE = True
+except Exception:
+    QR_AVAILABLE = False
+
+
+def _generate_qr_code(text: str) -> str | None:
+    """Génère un QR code contenant le texte et retourne une string base64 (PNG)."""
+    if not QR_AVAILABLE:
+        return None
+    try:
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(text)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
+# =============================================================================
+#  Nettoyage markdown avant traduction NLLB
 
 
 # =============================================================================
@@ -93,9 +129,12 @@ def _rag_pipeline(
     """
     t0 = time.perf_counter()
 
-    # ── Étape 1 : Hybrid search ───────────────────────────────────────────
+    # Embedding de la requête calculé UNE seule fois puis réutilisé partout
+    q_emb = vectorstore.embed_query(question_fr)
+
+    # ── Étape 1 : Hybrid search (un seul passage, index BM25 + embeddings cachés)
     t_hybrid_start = time.perf_counter()
-    candidates = vectorstore.hybrid_search(question_fr, k=fetch_k)
+    candidates = vectorstore.hybrid_search(question_fr, k=fetch_k, query_embedding=q_emb)
     t_hybrid   = round((time.perf_counter() - t_hybrid_start) * 1000, 1)
 
     if not candidates:
@@ -105,9 +144,9 @@ def _rag_pipeline(
             "latency_rerank_ms": 0, "chunks": [],
         }
 
-    # ── Étape 2 : MMR ─────────────────────────────────────────────────────
+    # ── Étape 2 : MMR sur les candidats déjà récupérés ────────────────────
     t_mmr_start  = time.perf_counter()
-    mmr_results  = vectorstore.mmr_search(question_fr, k=mmr_k, fetch_k=fetch_k)
+    mmr_results  = vectorstore.mmr_from_candidates(candidates, q_emb, k=mmr_k)
     t_mmr        = round((time.perf_counter() - t_mmr_start) * 1000, 1)
 
     mmr_texts = [r[1] for r in mmr_results]
@@ -149,10 +188,10 @@ def answer(
     unified_text: str,
     provider: str             = "groq",
     tts: bool                 = False,
-    tts_engine: Optional[str] = None,
     tts_out: str              = "response.wav",
     seed_docs: Optional[list[str]]  = None,
     seed_filtered: Optional[list[dict]] = None,
+    progress: Optional[Callable[[str, dict], None]] = None,
 ) -> dict:
     """Traite une question et retourne la réponse complète avec trace.
 
@@ -160,10 +199,11 @@ def answer(
         unified_text:   Question en wolof ou français.
         provider:       'groq' | 'gemini' | 'local'
         tts:            Générer une réponse vocale.
-        tts_engine:     'oolel' | 'speecht5' | 'edge' | None (→ .env)
         tts_out:        Chemin du fichier audio de sortie.
         seed_docs:      Documents en mémoire (si ChromaDB vide).
         seed_filtered:  Docs orientation pour le seed.
+        progress:       Callback optionnel appelé à chaque étape avec
+                        (step: str, info: dict) — utilisé par le streaming SSE.
 
     Returns:
         dict {
@@ -177,13 +217,22 @@ def answer(
     t_total = time.perf_counter()
     trace   = {}
 
+    def _emit(step: str, **info):
+        if progress:
+            try:
+                progress(step, info)
+            except Exception:
+                pass
+
     # ── 1. Détection de langue ────────────────────────────────────────────
     lang             = detect_language(unified_text)
     trace["input_lang"] = lang
+    _emit("detect", lang=lang)
 
     # ── 2. Traduction WO→FR si nécessaire ────────────────────────────────
     question_fr = unified_text
     if lang == "wo":
+        _emit("translate_in")
         t0 = time.perf_counter()
         question_fr, _ = wolof_to_french(unified_text)
         trace["wolof_to_french"] = {
@@ -195,8 +244,10 @@ def answer(
     # ── 3. Intention ──────────────────────────────────────────────────────
     intent         = detect_intent(question_fr)
     trace["intent"] = intent
+    _emit("intent", intent=intent)
 
     # ── 4. RAG ────────────────────────────────────────────────────────────
+    _emit("retrieval")
     n_docs = vectorstore.count()
 
     if n_docs > 0:
@@ -215,6 +266,7 @@ def answer(
     trace["n_docs_in_db"] = n_docs
 
     # ── 5. Génération LLM ─────────────────────────────────────────────────
+    _emit("llm", provider=provider)
     t0          = time.perf_counter()
     # plain=True si la réponse sera traduite en wolof (NLLB ne gère pas le markdown)
     response_fr = generate(question_fr, context_fr, provider=provider, plain=(lang == "wo"))
@@ -229,8 +281,20 @@ def answer(
         "response":    response_fr,
     }
 
+    # ── QR Code pour les procédures ──────────────────────────────────────────
+    if intent == "procedure":
+        t0 = time.perf_counter()
+        qr_b64 = _generate_qr_code(response_fr)
+        if qr_b64:
+            response["qr_code"] = qr_b64
+        trace["qr_code"] = {
+            "generated": qr_b64 is not None,
+            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+        }
+
     # ── 6. Traduction FR→WO ───────────────────────────────────────────────
     if lang == "wo":
+        _emit("translate_out")
         t0 = time.perf_counter()
         # Nettoyer le markdown avant traduction (NLLB ne gère pas les balises)
         response_fr_clean = _strip_markdown(response_fr)
@@ -238,19 +302,20 @@ def answer(
         response["response_wo"] = response_wo
         response["response"]    = response_wo
         trace["french_to_wolof"] = {
-            "model":      "Lahad/nllb200-francais-wolof",
+            "model":      "bilalfaye/nllb-200-distilled-600M-wo-fr-en",
             "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
         }
 
     # ── 7. TTS (optionnel) ────────────────────────────────────────────────
     if tts:
+        _emit("tts")
         from tts_Ooleil.tts import synthesize, source as tts_source
         t0           = time.perf_counter()
         text_for_tts = response.get("response_wo", response_fr)
-        synthesize(text_for_tts, tts_out, engine=tts_engine)
+        synthesize(text_for_tts, tts_out)
         response["audio"] = tts_out
         trace["tts"] = {
-            "engine":     tts_source(tts_engine),
+            "engine":     tts_source(),
             "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
         }
 

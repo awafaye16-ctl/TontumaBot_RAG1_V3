@@ -1,7 +1,7 @@
 """Générateur de réponse LLM — V3.
 
 Providers disponibles :
-  groq   → Groq API  (qwen/qwen3-32b, rapide, gratuit avec clé)
+  groq   → Groq API  (openai/gpt-oss-120b par défaut, non-reasoning, rapide)
   gemini → Google Gemini API (gemini-2.0-flash)
   local  → Qwen2.5-7B-Instruct en 4bit NF4 (retenu après benchmark,
             ~4.7 Go VRAM, tient sur T4)
@@ -50,7 +50,7 @@ def _groq_generate(question_fr: str, context_fr: str, plain: bool = False) -> st
     client = Groq(api_key=settings.GROQ_API_KEY)
     prompt = SYSTEM_PROMPT_PLAIN if plain else SYSTEM_PROMPT
     completion = client.chat.completions.create(
-        model="qwen/qwen3.6-27b",
+        model=settings.GROQ_MODEL,
         messages=[
             {"role": "system", "content": prompt},
             {"role": "user",   "content": f"Contexte :\n{context_fr}\n\nQuestion : {question_fr}"},
@@ -65,7 +65,7 @@ def _groq_generate(question_fr: str, context_fr: str, plain: bool = False) -> st
 def _gemini_generate(question_fr: str, context_fr: str, plain: bool = False) -> str:
     import google.generativeai as genai
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    model  = genai.GenerativeModel("gemini-2.0-flash")
+    model  = genai.GenerativeModel(settings.GEMINI_MODEL)
     prompt = SYSTEM_PROMPT_PLAIN if plain else SYSTEM_PROMPT
     full   = f"{prompt}\n\nContexte :\n{context_fr}\n\nQuestion : {question_fr}"
     return model.generate_content(full).text

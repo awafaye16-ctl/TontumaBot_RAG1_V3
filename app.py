@@ -15,8 +15,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 sys.path.insert(0, os.path.join(BASE_DIR, "data"))
 
+import asyncio
+import json
+import time
+import uuid
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -27,7 +33,64 @@ from seed_docs import get_documents
 import vectorstore
 import ingestion
 
-app = FastAPI(title="TontumaBot V3", version="3.0.0")
+
+# =============================================================================
+#  Warm-up : précharge les modèles au démarrage pour éviter la latence de
+#  chargement sur la première requête (embedder, BM25, reranker, NLLB, STT, TTS)
+# =============================================================================
+
+def _warmup() -> None:
+    def _step(name: str, fn):
+        t0 = time.perf_counter()
+        try:
+            fn()
+            print(f"[warmup] {name} prêt ({(time.perf_counter() - t0) * 1000:.0f} ms)")
+        except Exception as e:
+            print(f"[warmup] {name} ignoré : {e}")
+
+    # Embedder + cache du corpus (index BM25 + embeddings)
+    _step("embedder", vectorstore.get_embedder)
+    _step("corpus/bm25", vectorstore._get_corpus)
+
+    # Reranker cross-encoder
+    def _reranker():
+        from retrieval.reranker import load_model
+        load_model()
+    _step("reranker", _reranker)
+
+    # Traduction NLLB (WO↔FR)
+    def _nllb():
+        from translation.nllb import _load_model
+        _load_model()
+    _step("nllb", _nllb)
+
+    # STT (Whisper wolof) — optionnel
+    if settings.WARMUP_STT:
+        def _stt():
+            from input.stt import load_model
+            load_model()
+        _step("stt", _stt)
+
+    # TTS (Oolel-Voices) — optionnel
+    if settings.WARMUP_TTS:
+        def _tts():
+            from tts_Ooleil.tts import _load
+            _load()
+        _step("tts", _tts)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.WARMUP_ON_START:
+        print("[warmup] Préchargement des modèles au démarrage...")
+        t0 = time.perf_counter()
+        # Chargement bloquant hors de l'event loop
+        await asyncio.get_running_loop().run_in_executor(None, _warmup)
+        print(f"[warmup] Terminé en {time.perf_counter() - t0:.1f} s")
+    yield
+
+
+app = FastAPI(title="TontumaBot V3", version="3.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,13 +117,117 @@ class AskRequest(BaseModel):
     question:   str
     provider:   str | None = None   # groq | gemini | local
     tts:        bool        = False
-    tts_engine: str | None = None   # oolel | speecht5 | edge
 
 
 class RagasRequest(BaseModel):
     """Jeu de test pour l'évaluation RAGAS."""
     test_cases: list[dict]   # liste de {question, reference_answer, category?, language?}
     provider:   str = "groq"
+
+
+# =============================================================================
+#  SSE — Server-Sent Events pour la réponse en streaming
+# =============================================================================
+#
+#  Modèle : REST pour l'envoi (POST), SSE pour la réponse (text/event-stream).
+#
+#  Événements émis (chacun : "event: <nom>\ndata: <json>\n\n") :
+#    status  { step: "start|stt|detect|translate_in|intent|retrieval|llm|translate_out|tts", ... }
+#    result  { response, response_fr, response_wo?, qr_code?, audio_url?, lang, trace }
+#    error   { message }
+#    done    {}
+#
+#  L'audio n'est PAS envoyé dans le flux (SSE = texte) : on renvoie une URL
+#  `audio_url` (fichier servi via /static) que le client récupère en GET.
+
+SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
+    """Exécute le pipeline (dans un thread) et streame la progression en SSE.
+
+    Le pipeline synchrone tourne dans un executor ; ses callbacks `progress`
+    sont relayés vers ce générateur async via une queue thread-safe.
+    """
+    loop = asyncio.get_running_loop()
+    q: asyncio.Queue = asyncio.Queue()
+
+    def progress(step: str, info: dict):
+        loop.call_soon_threadsafe(q.put_nowait, ("status", {"step": step, **info}))
+
+    def run():
+        try:
+            result = pipeline_answer(
+                question,
+                provider      = provider,
+                tts           = tts,
+                tts_out       = tts_out,
+                seed_docs     = SEED_DOCS,
+                seed_filtered = SEED_FILTERED,
+                progress      = progress,
+            )
+            loop.call_soon_threadsafe(q.put_nowait, ("result", result))
+        except Exception as e:  # noqa: BLE001
+            loop.call_soon_threadsafe(q.put_nowait, ("error", {"message": str(e)}))
+        finally:
+            loop.call_soon_threadsafe(q.put_nowait, None)  # sentinelle de fin
+
+    loop.run_in_executor(None, run)
+
+    yield _sse("status", {"step": "start", "question": question, "provider": provider, "tts": tts})
+
+    while True:
+        item = await q.get()
+        if item is None:
+            break
+        event, data = item
+        if event == "result":
+            trace      = data.get("trace", {})
+            audio_path = data.get("audio")
+            audio_url  = (
+                f"/static/{os.path.basename(audio_path)}"
+                if audio_path and os.path.exists(audio_path) else None
+            )
+            yield _sse("result", {
+                "response":    data.get("response", ""),
+                "response_fr": data.get("response_fr", ""),
+                "response_wo": data.get("response_wo"),
+                "qr_code":     data.get("qr_code"),
+                "audio_url":   audio_url,
+                "lang":        trace.get("input_lang"),
+                "trace":       trace,
+            })
+        else:
+            yield _sse(event, data)
+
+    yield _sse("done", {})
+
+
+async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: str):
+    """Variante audio : STT (dans un thread) puis pipeline SSE."""
+    loop = asyncio.get_running_loop()
+    yield _sse("status", {"step": "stt"})
+    try:
+        from input.stt import transcribe
+        text = await loop.run_in_executor(
+            None, lambda: transcribe(tmp_path, language=settings.STT_LANGUAGE or None)
+        )
+    except Exception as e:  # noqa: BLE001
+        yield _sse("error", {"message": f"STT échoué : {e}"})
+        yield _sse("done", {})
+        return
+
+    if not text.strip():
+        yield _sse("error", {"message": "Aucun texte transcrit"})
+        yield _sse("done", {})
+        return
+
+    async for chunk in _pipeline_sse(text, provider, tts, tts_out):
+        yield chunk
 
 
 # =============================================================================
@@ -84,9 +251,8 @@ def health():
         "version":      "3.0.0",
         "llm_provider": settings.LLM_PROVIDER,
         "llm_ready":    settings.llm_ready,
-        "tts_engine":   settings.TTS_ENGINE,
-        "nllb_wo_fr":   settings.NLLB_WO_FR_MODEL,
-        "nllb_fr_wo":   settings.NLLB_FR_WO_MODEL,
+        "tts":          "oolel-voices",
+        "nllb_model":   settings.NLLB_WO_FR_MODEL,
         "stt_model":    settings.STT_MODEL_PATH,
         "reranker":     settings.RERANKER_MODEL,
         "n_documents":  len(vectorstore.all_documents()),
@@ -97,25 +263,23 @@ def health():
 # ── Texte ─────────────────────────────────────────────────────────────────
 
 @app.post("/ask")
-def ask(req: AskRequest):
-    """Question texte (FR ou WO).
+async def ask(req: AskRequest):
+    """Question texte (FR ou WO) — réponse en SSE (text/event-stream).
 
-    Le pipeline détecte la langue, traduit si WO, exécute le RAG complet
-    (hybrid → MMR → reranker), génère la réponse, re-traduit si WO,
-    et produit optionnellement un audio TTS.
+    REST pour l'envoi (ce POST), SSE pour la réponse. Le pipeline détecte la
+    langue, traduit si WO, exécute le RAG complet (hybrid → MMR → reranker),
+    génère la réponse, re-traduit si WO, et produit optionnellement un audio TTS
+    (renvoyé via `audio_url`, servi sur /static).
     """
     if not req.question.strip():
         raise HTTPException(400, "Question vide")
 
     provider = req.provider or settings.LLM_PROVIDER
-    return pipeline_answer(
-        req.question.strip(),
-        provider    = provider,
-        tts         = req.tts,
-        tts_engine  = req.tts_engine,
-        tts_out     = os.path.join(STATIC_DIR, "response.wav"),
-        seed_docs   = SEED_DOCS,
-        seed_filtered = SEED_FILTERED,
+    tts_out  = os.path.join(STATIC_DIR, f"response_{uuid.uuid4().hex[:8]}.wav")
+    return StreamingResponse(
+        _pipeline_sse(req.question.strip(), provider, req.tts, tts_out),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
     )
 
 
@@ -125,13 +289,12 @@ def ask(req: AskRequest):
 async def ask_audio(
     file:       UploadFile     = File(...),
     tts:        bool           = Form(False),
-    tts_engine: str | None     = Form(None),
     provider:   str | None     = Form(None),
 ):
-    """Audio (WAV, MP3, M4A, WebM) → STT → pipeline RAG → réponse + TTS optionnel.
+    """Audio (WAV, MP3, M4A, WebM) → STT → pipeline RAG → réponse SSE + TTS optionnel.
 
-    Le STT utilise M9and2M/whisper-small-wolof.
-    La langue est détectée automatiquement sur la transcription.
+    Le STT utilise M9and2M/whisper-small-wolof. La langue est détectée
+    automatiquement sur la transcription. La réponse est streamée en SSE.
     """
     # Sauvegarde du fichier uploadé
     safe_name = os.path.basename(file.filename or "audio.wav")
@@ -139,24 +302,12 @@ async def ask_audio(
     with open(tmp_path, "wb") as f:
         f.write(await file.read())
 
-    # Transcription STT
-    try:
-        from input.stt import transcribe
-        text = transcribe(tmp_path, language=settings.STT_LANGUAGE or None)
-    except Exception as e:
-        raise HTTPException(500, f"STT échoué : {e}")
-
-    if not text.strip():
-        raise HTTPException(400, "Aucun texte transcrit")
-
-    return pipeline_answer(
-        text,
-        provider      = provider or settings.LLM_PROVIDER,
-        tts           = tts,
-        tts_engine    = tts_engine,
-        tts_out       = os.path.join(STATIC_DIR, "response.wav"),
-        seed_docs     = SEED_DOCS,
-        seed_filtered = SEED_FILTERED,
+    provider = provider or settings.LLM_PROVIDER
+    tts_out  = os.path.join(STATIC_DIR, f"response_{uuid.uuid4().hex[:8]}.wav")
+    return StreamingResponse(
+        _audio_pipeline_sse(tmp_path, provider, tts, tts_out),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
     )
 
 
@@ -171,29 +322,22 @@ def translate_test(
     from translation.nllb import wolof_to_french, french_to_wolof
     if direction == "fr2wo":
         result, seconds = french_to_wolof(text)
-        model = settings.NLLB_FR_WO_MODEL
         dir_label = "fr→wo"
     else:
         result, seconds = wolof_to_french(text)
-        model = settings.NLLB_WO_FR_MODEL
         dir_label = "wo→fr"
     return {
         "input":     text,
         "output":    result,
         "direction": dir_label,
-        "model":     model,
+        "model":     settings.NLLB_WO_FR_MODEL,
         "seconds":   seconds,
     }
 
 
 # ── Audio TTS ─────────────────────────────────────────────────────────────
-
-@app.get("/response.wav")
-def get_audio():
-    path = os.path.join(STATIC_DIR, "response.wav")
-    if not os.path.exists(path):
-        raise HTTPException(404, "Aucun audio généré")
-    return FileResponse(path, media_type="audio/wav")
+#  L'audio généré est écrit dans STATIC_DIR sous un nom unique et servi via le
+#  montage /static. La réponse SSE renvoie son URL dans le champ `audio_url`.
 
 
 # ── Admin RAG ─────────────────────────────────────────────────────────────

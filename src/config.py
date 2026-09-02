@@ -2,7 +2,7 @@
 
 Modèles sélectionnés après benchmark :
   - WO→FR : bilalfaye/nllb-200-distilled-600M-wo-fr-en
-  - FR→WO : Lahad/nllb200-francais-wolof
+  - FR→WO : bilalfaye/nllb-200-distilled-600M-wo-fr-en (même modèle)
   - STT    : M9and2M/whisper-small-wolof  (local : wolof-whisper-small-lora/)
   - TTS    : Oolel-Voices (soynade-research/Oolel-Voices)
   - LLM    : Qwen/Qwen2.5-7B-Instruct (local 4bit) ou Groq/Gemini (API)
@@ -39,6 +39,10 @@ def _load_env():
 _load_env()
 
 
+def _env_bool(key: str, default: bool) -> bool:
+    return os.getenv(key, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
 class Settings:
     BASE_DIR = BASE_DIR
 
@@ -46,25 +50,23 @@ class Settings:
     GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
     GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
     LLM_PROVIDER    = os.getenv("LLM_PROVIDER", "groq")
+    # Modèle Groq : openai/gpt-oss-120b (non-reasoning, rapide, pas de <think>)
+    GROQ_MODEL      = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     # Modèle local (utilisé si LLM_PROVIDER == "local")
     LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
     LOCAL_LLM_QUANT = os.getenv("LOCAL_LLM_QUANT", "4bit")  # 4bit | 8bit | fp16
 
-    # ── Traduction — deux modèles distincts (résultat benchmark) ─────────
-    # WO→FR : bilalfaye fine-tuné wolof-français-anglais
+    # ── Traduction — un seul modèle pour les deux directions ─────────────
+    # bilalfaye/nllb-200-distilled-600M-wo-fr-en (WO→FR et FR→WO)
     NLLB_WO_FR_MODEL = os.getenv(
         "NLLB_WO_FR_MODEL",
         str(BASE_DIR / "src" / "Wo_fr_bilalfayenllb-200-distilled-600M-wo-fr-en")
         if (BASE_DIR / "src" / "Wo_fr_bilalfayenllb-200-distilled-600M-wo-fr-en" / "config.json").exists()
         else "bilalfaye/nllb-200-distilled-600M-wo-fr-en"
     )
-    # FR→WO : Lahad fine-tuné français→wolof
-    NLLB_FR_WO_MODEL = os.getenv(
-        "NLLB_FR_WO_MODEL",
-        str(BASE_DIR / "src" / "Fr-Wo_Lahadnllb200-francais-wolof")
-        if (BASE_DIR / "src" / "Fr-Wo_Lahadnllb200-francais-wolof" / "config.json").exists()
-        else "Lahad/nllb200-francais-wolof"
-    )
+    # Nombre de beams pour la traduction : 2 = qualité, 1 = greedy (plus rapide)
+    NLLB_NUM_BEAMS = int(os.getenv("NLLB_NUM_BEAMS", "2"))
 
     # ── STT ───────────────────────────────────────────────────────────────
     # Priorité : dossier local src/stt_wolof-whisper-small-lora/
@@ -118,11 +120,11 @@ class Settings:
     )
 
     # ── TTS ───────────────────────────────────────────────────────────────
-    # Moteur par défaut : oolel (meilleur qualité selon benchmark)
-    TTS_ENGINE       = os.getenv("TTS_ENGINE", "oolel")
-    OOLEL_TTS_REPO   = os.getenv("OOLEL_TTS_REPO", "soynade-research/Oolel-Voices")
-    # Fallback SpeechT5 si Oolel indisponible
-    WOLOF_TTS_MODEL  = os.getenv("WOLOF_TTS_MODEL", "bilalfaye/speecht5_tts-wolof-v0.2")
+    OOLEL_TTS_REPO = os.getenv("OOLEL_TTS_REPO", "soynade-research/Oolel-Voices")
+    # Vitesse de lecture : 1.0 = normale, >1 ralentit (voix plus posée), <1 accélère
+    TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
+    # Itérations de diffusion du vocodeur : 10 = qualité originale, 4 = ~2.5x plus rapide
+    TTS_N_STEPS = int(os.getenv("TTS_N_STEPS", "10"))
 
     # ── Reranker ──────────────────────────────────────────────────────────
     RERANKER_MODEL = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
@@ -131,6 +133,13 @@ class Settings:
     # ── Serveur ───────────────────────────────────────────────────────────
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "8000"))
+
+    # ── Warm-up au démarrage ──────────────────────────────────────────────
+    # Précharge les modèles au lancement de l'app pour éviter la latence de
+    # chargement sur la première requête. Chaque modèle peut être désactivé.
+    WARMUP_ON_START = _env_bool("WARMUP_ON_START", True)
+    WARMUP_STT      = _env_bool("WARMUP_STT", True)
+    WARMUP_TTS      = _env_bool("WARMUP_TTS", True)
 
     @property
     def llm_ready(self) -> bool:
