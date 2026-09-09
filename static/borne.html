@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TontumaBot — Borne interactive 3D</title>
+  <link rel="stylesheet" href="/static/borne.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; background: #05070f; }
+
+    /* Scène : WebGL (châssis) en dessous, CSS3D (écran vivant) au-dessus.
+       Le conteneur CSS3D laisse passer les clics sauf sur l'écran lui-même,
+       ce qui garde les boutons 3D cliquables au raycaster. */
+    #stage { position: fixed; inset: 0; }
+    #gl    { position: absolute; inset: 0; display: block; }
+    #css3d { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    #css3d .screen { pointer-events: auto; }
+
+    /* Dalle de l'écran : taille en pixels convertie en mètres par CSS3DObject. */
+    .screen {
+      width: 780px;
+      height: 500px;
+      border-radius: 6px;
+      box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.85);
+    }
+
+    /* Bandeau d'aide hors 3D */
+    .hud {
+      position: fixed; left: 0; right: 0; bottom: 12px;
+      text-align: center; font-size: 11.5px; color: #5c6685;
+      pointer-events: none; z-index: 5;
+    }
+    .hud kbd {
+      background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 5px; padding: 1px 5px; font-size: 11px; font-family: inherit;
+    }
+    .hud a { color: #6f7a9c; pointer-events: auto; }
+
+    .topinfo {
+      position: fixed; top: 14px; left: 18px; z-index: 5;
+      font-size: 12px; color: #6f7a9c; line-height: 1.7;
+    }
+    .topinfo b { color: #aab4d0; font-size: 13px; }
+    .topinfo .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2b3242; margin-right: 6px; }
+    .topinfo .dot.on { background: #2ee6a6; box-shadow: 0 0 10px #2ee6a6; }
+
+    /* Chargement / repli */
+    #boot {
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; background: #05070f; color: #8b96b8; font-size: 14px;
+      transition: opacity .5s;
+    }
+    #boot.hide { opacity: 0; pointer-events: none; }
+    #boot .spin {
+      width: 42px; height: 42px; border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.1); border-top-color: #2ee6a6;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #boot a { color: #2ee6a6; }
+  </style>
+</head>
+
+<body>
+
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="css3d"></div>
+  </div>
+
+  <!-- ═══ Dalle de l'écran : déplacée dans la scène 3D par CSS3DObject ═══ -->
+  <div class="screen off" id="screen">
+
+    <div class="standby" id="standby">
+      <div class="pulse">🏛️</div>
+      <div class="big">Borne en veille</div>
+      <div class="sub">Appuyez sur <b>🇸🇳 WOLOF</b> ou <b>🇫🇷 FRANÇAIS</b> pour poser votre question
+        à la voix — ou sur <b>MARCHE</b> pour utiliser le clavier.<br>
+        <small>Session de 10 questions · extinction après 10 min d’inactivité</small></div>
+      <div class="arrow-hint">Les trois boutons du pupitre</div>
+    </div>
+
+    <div class="session" id="session">
+      <div class="convo" id="convo"></div>
+
+      <div class="statusbar">
+        <div class="status-txt" id="status">Prêt</div>
+        <div class="counter mem" id="mem" title="Mémoire conversationnelle">🧠 0 / 10</div>
+        <div class="counter" id="counter">💬 0 / 10</div>
+        <div class="rec-time" id="rec-time">0:00</div>
+        <div class="viz" id="viz"></div>
+      </div>
+
+      <div class="keyboard" id="keyboard">
+        <textarea class="kb-input" id="kb-input" rows="1"
+                  placeholder="Écrivez votre question en wolof ou en français…"></textarea>
+        <div class="kb-row" data-keys="a z e r t y u i o p"></div>
+        <div class="kb-row" data-keys="q s d f g h j k l m"></div>
+        <div class="kb-row" data-keys="w x c v b n é è à ç"></div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="topinfo">
+    <b>TontumaBot — Borne 3D</b><br>
+    <span><i class="dot" id="d-power"></i>Marche</span> ·
+    <span><i class="dot" id="d-voice"></i><span id="voice-label">Micro</span></span> ·
+    <span><i class="dot" id="d-net"></i><span id="net-label">Service…</span></span>
+  </div>
+
+  <div class="hud">
+    Cliquez les boutons du pupitre · <kbd>1</kbd> wolof · <kbd>2</kbd> français ·
+    <kbd>3</kbd>/<kbd>Espace</kbd> marche-arrêt (maintenir 1,5 s = extinction) ·
+    glisser = tourner · molette = zoom · <a href="/borne/simple">version 2D</a> · <a href="/">interface classique</a>
+  </div>
+
+  <div id="boot">
+    <div class="spin"></div>
+    <div>Chargement de la borne 3D…</div>
+    <div id="boot-alt" style="display:none;font-size:13px;text-align:center;max-width:420px">
+      Le rendu 3D n’a pas pu démarrer (WebGL ou CDN indisponible).<br>
+      <a href="/borne/simple">→ Ouvrir la borne en version 2D</a>
+    </div>
+  </div>
+
+  <!-- Logique commune (états, SSE, micro, clavier tactile) -->
+  <script src="/static/borne.js"></script>
+  <script>
+    // La logique démarre indépendamment du rendu 3D : si three.js échoue,
+    // l'écran reste fonctionnel et on propose le repli 2D.
+    Borne.init({
+      onRender: i => window.Chassis3D && window.Chassis3D.onRender(i),
+      onKey:    (k, down) => window.Chassis3D && window.Chassis3D.onKey(k, down),
+      onHealth: d => {
+        document.getElementById('d-net').classList.toggle('on', !!d);
+        document.getElementById('net-label').textContent =
+          d ? 'Service ' + (d.llm_ready ? String(d.llm_provider).toUpperCase() : 'dégradé') : 'Hors ligne';
+      },
+    });
+
+    // Repli si le module 3D ne s'est pas annoncé.
+    setTimeout(() => {
+      if (!window.Chassis3D) {
+        document.querySelector('#boot .spin').style.display = 'none';
+        document.getElementById('boot-alt').style.display = 'block';
+      }
+    }, 9000);
+  </script>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Châssis 3D de la borne (three.js)
+    //
+    //  Le boîtier, le pupitre et les deux boutons physiques sont des maillages
+    //  WebGL ; la dalle de l'écran est un CSS3DObject — du vrai DOM positionné
+    //  dans la scène, donc encore scrollable, cliquable et sélectionnable.
+    //  Le conteneur CSS3D est au-dessus du canvas mais transparent aux clics :
+    //  le raycaster reçoit les clics sur les boutons, l'écran reçoit les siens.
+    // ═══════════════════════════════════════════════════════════════════════
+    import * as THREE from 'three';
+    import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+    import { RoomEnvironment }            from 'three/addons/environments/RoomEnvironment.js';
+    import { RoundedBoxGeometry }         from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+    // ── Échelle : la dalle HTML fait 780×500 px pour 46 cm de large ──
+    const PX_W = 780, PX_H = 500;
+    const SCREEN_W = 0.46;
+    const PX = SCREEN_W / PX_W;            // pixels → mètres
+    const SCREEN_H = PX_H * PX;            // ≈ 0,295 m
+
+    const canvas = document.getElementById('gl');
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.98;
+
+    const css = new CSS3DRenderer();
+    document.getElementById('css3d').appendChild(css.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070f);
+    scene.fog = new THREE.Fog(0x05070f, 2.6, 8.5);
+
+    // Réflexions d'ambiance : donne du corps aux métaux sans HDR à télécharger.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.06).texture;
+    scene.environmentIntensity = 0.35;
+
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 40);
+    const TARGET = new THREE.Vector3(0, 1.215, 0);
+
+    // Zone à cadrer (m) : de la caisse d'écran jusqu'aux boutons du pupitre.
+    const FRAME_W = 0.90, FRAME_H = 1.02;
+
+    // Distance minimale pour que cette zone tienne dans la fenêtre, quel que
+    // soit son format — sinon la borne déborde en portrait.
+    function fitDistance() {
+      const vFov = THREE.MathUtils.degToRad(camera.fov);
+      const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+      return Math.max((FRAME_H / 2) / Math.tan(vFov / 2),
+                      (FRAME_W / 2) / Math.tan(hFov / 2));
+    }
+
+    // ═══ Matériaux ═══
+    const matShell = new THREE.MeshPhysicalMaterial({
+      color: 0x161b25, metalness: 0.60, roughness: 0.42,
+      clearcoat: 0.30, clearcoatRoughness: 0.30,
+    });
+    const matShellDark = new THREE.MeshPhysicalMaterial({
+      color: 0x11151d, metalness: 0.75, roughness: 0.30, clearcoat: 0.35,
+    });
+    const matDeck   = new THREE.MeshPhysicalMaterial({
+      color: 0x141922, metalness: 0.35, roughness: 0.62, clearcoat: 0.10,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+    });
+    const matBlack  = new THREE.MeshStandardMaterial({ color: 0x07090e, metalness: 0.5, roughness: 0.45 });
+    const matRubber = new THREE.MeshStandardMaterial({ color: 0x0a0c11, metalness: 0.05, roughness: 0.95 });
+    const matSteel  = new THREE.MeshStandardMaterial({ color: 0x8d98ad, metalness: 0.95, roughness: 0.28 });
+    const matAccent = new THREE.MeshStandardMaterial({
+      color: 0x0d1a18, emissive: 0x2ee6a6, emissiveIntensity: 0.8, roughness: 0.4,
+    });
+
+    // ── Texture de texte (plaques, libellés) ──
+    function textTexture(text, opts = {}) {
+      const {
+        w = 512, h = 128, size = 58, color = '#c6d0e8', bg = 'rgba(0,0,0,0)',
+        weight = 700, spacing = 3, font = 'Inter, Segoe UI, system-ui, sans-serif',
+      } = opts;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const x = c.getContext('2d');
+      x.fillStyle = bg; x.fillRect(0, 0, w, h);
+      x.font = weight + ' ' + size + 'px ' + font;
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.letterSpacing = spacing + 'px';
+      x.fillStyle = color;
+      x.fillText(text, w / 2, h / 2 + 2);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 8;
+      return t;
+    }
+
+    // ── Texture de grille haut-parleur (points percés) ──
+    function grilleTexture(cols = 44, rows = 8) {
+      const c = document.createElement('canvas');
+      c.width = cols * 12; c.height = rows * 12;
+      const x = c.getContext('2d');
+      x.fillStyle = '#12161f'; x.fillRect(0, 0, c.width, c.height);
+      x.fillStyle = '#04060a';
+      for (let j = 0; j < rows; j++)
+        for (let i = 0; i < cols; i++)
+          { x.beginPath(); x.arc(i * 12 + 6 + (j % 2) * 6, j * 12 + 6, 3.4, 0, 7); x.fill(); }
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    }
+
+    function plate(text, w, h, opts) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: textTexture(text, opts), transparent: true, depthWrite: false })
+      );
+      return m;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Construction de la borne
+    // ═══════════════════════════════════════════════════════════════════
+    const kiosk = new THREE.Group();
+    scene.add(kiosk);
+
+    function addMesh(geo, mat, x, y, z, parent = kiosk) {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.castShadow = true; m.receiveShadow = true;
+      parent.add(m);
+      return m;
+    }
+
+    // ── Socle et fût ──
+    addMesh(new RoundedBoxGeometry(0.58, 0.05, 0.40, 3, 0.012), matRubber, 0, 0.025, -0.02);
+    addMesh(new RoundedBoxGeometry(0.50, 0.05, 0.34, 3, 0.014), matShellDark, 0, 0.07, -0.02);
+    const column = addMesh(new RoundedBoxGeometry(0.46, 0.90, 0.26, 5, 0.028), matShell, 0, 0.50, -0.02);
+
+    // Bandeau lumineux vertical sur le fût (couleur = état de la borne)
+    const stripMat = new THREE.MeshStandardMaterial({
+      color: 0x05070c, emissive: 0x2ee6a6, emissiveIntensity: 0.9, roughness: 0.35,
+    });
+    const strip = addMesh(new THREE.BoxGeometry(0.026, 0.66, 0.006), stripMat, -0.20, 0.50, 0.113);
+
+    // Fentes : lecteur de carte et sortie ticket
+    addMesh(new THREE.BoxGeometry(0.11, 0.012, 0.02), matBlack, 0.10, 0.80, 0.115);
+    addMesh(new THREE.BoxGeometry(0.20, 0.014, 0.02), matBlack, 0.02, 0.36, 0.115);
+    const ticket = plate('TICKET', 0.09, 0.016, { w: 360, h: 64, size: 34, color: '#4d566e' });
+    ticket.position.set(0.02, 0.335, 0.116); kiosk.add(ticket);
+    const cardLbl = plate('CARTE', 0.075, 0.014, { w: 320, h: 64, size: 32, color: '#4d566e' });
+    cardLbl.position.set(0.10, 0.782, 0.116); kiosk.add(cardLbl);
+
+    // Plaque institutionnelle
+    const plaque = plate('RÉPUBLIQUE DU SÉNÉGAL · SERVICE PUBLIC', 0.30, 0.028,
+      { w: 1024, h: 96, size: 40, color: '#7f8cab', spacing: 2 });
+    plaque.position.set(0, 0.56, 0.132); kiosk.add(plaque);
+
+    // ── Console inclinée : volume plein en coin, sa face haute porte les boutons.
+    //    Profil latéral extrudé le long de X ; un simple plateau incliné laissait
+    //    dépasser le sommet du fût au travers du pupitre.
+    const CONSOLE = { back: 0.255, front: 0.085, halfZ: 0.13, y: 0.935, z: 0.06, w: 0.68 };
+
+    const prof = new THREE.Shape();               // x du profil = −z monde
+    prof.moveTo( CONSOLE.halfZ, 0);
+    prof.lineTo(-CONSOLE.halfZ, 0);
+    prof.lineTo(-CONSOLE.halfZ, CONSOLE.front);
+    prof.lineTo( CONSOLE.halfZ, CONSOLE.back);
+    prof.closePath();
+
+    const consoleGeo = new THREE.ExtrudeGeometry(prof, {
+      depth: CONSOLE.w, bevelEnabled: true,
+      bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 2,
+    });
+    consoleGeo.rotateY(Math.PI / 2);
+    consoleGeo.translate(-CONSOLE.w / 2, CONSOLE.y, CONSOLE.z);
+    addMesh(consoleGeo, matDeck, 0, 0, 0);
+
+    // Repère aligné sur la face supérieure de la console
+    const deck = new THREE.Group();
+    deck.position.set(0, CONSOLE.y + (CONSOLE.back + CONSOLE.front) / 2, CONSOLE.z);
+    deck.rotation.x = Math.atan2(CONSOLE.back - CONSOLE.front, CONSOLE.halfZ * 2);
+    kiosk.add(deck);
+
+    // ── Bouton physique ──
+    function makeButton(x, colorHex, labelTxt, subTxt) {
+      const g = new THREE.Group();
+      g.position.set(x, 0, 0.005);
+      deck.add(g);
+
+      addMesh(new THREE.CylinderGeometry(0.066, 0.069, 0.015, 48), matBlack, 0, 0.005, 0, g);
+
+      const moving = new THREE.Group();          // partie qui s'enfonce
+      g.add(moving);
+
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: 0x05070c, emissive: colorHex, emissiveIntensity: 0.6, roughness: 0.3,
+      });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0585, 0.0052, 20, 72), ringMat);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.016;
+      moving.add(ring);
+
+      const capMat = new THREE.MeshPhysicalMaterial({
+        color: colorHex, metalness: 0.25, roughness: 0.30,
+        clearcoat: 1, clearcoatRoughness: 0.12,
+        emissive: colorHex, emissiveIntensity: 0.12,
+      });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.051, 0.053, 0.021, 48), capMat);
+      body.position.y = 0.020; body.castShadow = true;
+      moving.add(body);
+
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(0.051, 48, 20, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+      dome.scale.y = 0.32; dome.position.y = 0.031; dome.castShadow = true;
+      moving.add(dome);
+
+      // Pictogramme gravé sur le capuchon
+      const ico = plate(labelTxt, 0.066, 0.066, { w: 256, h: 256, size: 158, color: '#07130c', spacing: 0 });
+      ico.rotation.x = -Math.PI / 2;
+      ico.position.y = 0.0475;
+      moving.add(ico);
+
+      // Libellé sérigraphié sur le pupitre
+      const lbl = plate(subTxt, 0.190, 0.020, { w: 768, h: 80, size: 38, color: '#d3ddf5', spacing: 1 });
+      lbl.rotation.x = -Math.PI / 2;
+      lbl.position.set(x, 0.006, 0.088);
+      deck.add(lbl);
+
+      g.userData = { moving, ringMat, capMat, ring, press: 0, target: 0, label: lbl };
+      moving.traverse(o => { if (o.isMesh) o.userData.button = g; });
+      return g;
+    }
+
+    // Vert = wolof, bleu = français, acier = marche/arrêt (rouge en STOP).
+    const btnWo    = makeButton(-0.215, 0x21c98d, 'WO', '🇸🇳 WOLOF');
+    const btnFr    = makeButton( 0.000, 0x4a8cff, 'FR', '🇫🇷 FRANÇAIS');
+    const btnPower = makeButton( 0.215, 0x8fa0bd, '⏻', 'MARCHE · ARRÊT');
+    btnWo.userData.id    = 'wo';
+    btnFr.userData.id    = 'fr';
+    btnPower.userData.id = 'power';
+
+    const BUTTONS = [btnWo, btnFr, btnPower];
+    const BY_ID   = { wo: btnWo, fr: btnFr, power: btnPower };
+
+    // ── Col de cygne et tête d'écran ──
+    addMesh(new RoundedBoxGeometry(0.24, 0.22, 0.20, 4, 0.02), matShellDark, 0, 1.16, -0.06);
+
+    const head = new THREE.Group();
+    head.position.set(0, 1.375, -0.015);
+    head.rotation.x = -0.16;                        // légère inclinaison vers l'usager
+    kiosk.add(head);
+
+    const shellHead = addMesh(new RoundedBoxGeometry(0.60, 0.44, 0.105, 6, 0.022), matShell, 0, 0, 0, head);
+    // Cadre noir mat autour de la dalle
+    addMesh(new RoundedBoxGeometry(0.50, 0.335, 0.012, 4, 0.008), matBlack, 0, 0.025, 0.050, head);
+
+    // Grille haut-parleur sous l'écran
+    const grille = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.30, 0.030),
+      new THREE.MeshStandardMaterial({ map: grilleTexture(), roughness: 0.85, metalness: 0.1 }));
+    grille.position.set(0, -0.163, 0.0535);
+    head.add(grille);
+
+    // Logo et caméra de visioguichet
+    const logo = plate('TONTUMABOT', 0.17, 0.020, { w: 768, h: 96, size: 46, color: '#9fb0d6', spacing: 4 });
+    logo.position.set(-0.155, 0.196, 0.0535); head.add(logo);
+
+    const lens = addMesh(new THREE.CylinderGeometry(0.010, 0.010, 0.006, 24), matBlack, 0.185, 0.196, 0.0535, head);
+    lens.rotation.x = Math.PI / 2;
+    const lensGlass = addMesh(new THREE.SphereGeometry(0.0062, 20, 16), 
+      new THREE.MeshPhysicalMaterial({ color: 0x0a1526, metalness: 0.2, roughness: 0.05, clearcoat: 1 }),
+      0.185, 0.196, 0.0565, head);
+
+    // Diode d'activité de la tête
+    const ledMat = new THREE.MeshStandardMaterial({ color: 0x05070c, emissive: 0x2ee6a6, emissiveIntensity: 1.2 });
+    const led = addMesh(new THREE.SphereGeometry(0.0045, 16, 12), ledMat, 0.150, 0.196, 0.0545, head);
+
+    // ── Dalle : vrai DOM injecté dans la scène ──
+    const screenEl = document.getElementById('screen');
+    const cssScreen = new CSS3DObject(screenEl);
+    cssScreen.position.set(0, 0.025, 0.0575);
+    cssScreen.scale.setScalar(PX);
+    head.add(cssScreen);
+
+    // Fond noir juste derrière la dalle (évite tout jour dans le boîtier)
+    addMesh(new THREE.PlaneGeometry(SCREEN_W, SCREEN_H), 
+      new THREE.MeshBasicMaterial({ color: 0x000000 }), 0, 0.025, 0.0565, head);
+
+    // ═══ Sol et lumières ═══
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(24, 24),
+      new THREE.MeshStandardMaterial({ color: 0x0a0d15, roughness: 0.45, metalness: 0.25 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    scene.add(new THREE.AmbientLight(0x2a3a55, 0.55));
+
+    const key = new THREE.SpotLight(0xdfe9ff, 55, 12, 0.62, 0.85, 2);
+    key.position.set(1.5, 3.4, 2.2);
+    key.target.position.copy(TARGET);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.bias = -0.0008;
+    scene.add(key, key.target);
+
+    const fill = new THREE.DirectionalLight(0x6f8cff, 0.55);
+    fill.position.set(-2.4, 1.8, 1.2);
+    scene.add(fill);
+
+    const rim = new THREE.PointLight(0x4a6ea8, 5, 6, 2);
+    rim.position.set(-1.1, 1.6, -1.4);
+    scene.add(rim);
+
+    const deskLight = new THREE.SpotLight(0xbfd2ff, 5, 2.2, 0.95, 0.95, 2);
+    deskLight.position.set(0.25, 1.85, 0.55);
+    deskLight.target.position.set(0, 1.03, 0.10);
+    scene.add(deskLight, deskLight.target);
+
+    // Halo projeté par la dalle (couleur pilotée par l'état)
+    const screenGlow = new THREE.PointLight(0x5b8cff, 0, 1.6, 2);
+    screenGlow.position.set(0, 1.36, 0.30);
+    scene.add(screenGlow);
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Interaction : raycaster sur les boutons, glisser/molette pour la vue
+    // ═══════════════════════════════════════════════════════════════════
+    const ray = new THREE.Raycaster();
+    const ptr = new THREE.Vector2();
+    let hovered = null, pressing = null, dragging = false;
+    let dragX = 0, dragY = 0, yaw = 0, pitch = 0.22, yawT = 0, pitchT = 0.22;
+    let zoom = 1, zoomT = 1;                 // facteur appliqué à fitDistance()
+    let dist = 0, distT = 0;                 // fixés au premier cadrage
+
+    function pick(e) {
+      const r = canvas.getBoundingClientRect();
+      ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+      ray.setFromCamera(ptr, camera);
+      const hits = ray.intersectObjects(BUTTONS, true);
+      return hits.length ? hits[0].object.userData.button : null;
+    }
+
+    canvas.addEventListener('pointerdown', e => {
+      const b = pick(e);
+      if (b) {
+        pressing = b;
+        b.userData.target = 1;
+        if (b === btnPower) Borne.holdStart();     // appui long = extinction
+        else Borne.pressLang(b.userData.id);
+      } else {
+        dragging = true; dragX = e.clientX; dragY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+      }
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', e => {
+      if (dragging) {
+        yawT   = THREE.MathUtils.clamp(yawT   + (e.clientX - dragX) * 0.005, -0.55, 0.55);
+        pitchT = THREE.MathUtils.clamp(pitchT - (e.clientY - dragY) * 0.003, -0.10, 0.52);
+        dragX = e.clientX; dragY = e.clientY;
+        return;
+      }
+      const b = pick(e);
+      if (b !== hovered) {
+        hovered = b;
+        canvas.style.cursor = b ? 'pointer' : 'grab';
+      }
+    });
+
+    function release() {
+      if (pressing) {
+        pressing.userData.target = 0;
+        if (pressing === btnPower) Borne.holdEnd(true);
+        pressing = null;
+      }
+      dragging = false;
+      canvas.style.cursor = hovered ? 'pointer' : 'grab';
+    }
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+    canvas.addEventListener('pointerleave', () => { if (pressing) { pressing.userData.target = 0; Borne.holdEnd(false); pressing = null; } dragging = false; });
+
+    addEventListener('wheel', e => {
+      zoomT = THREE.MathUtils.clamp(zoomT + e.deltaY * 0.0011, 0.72, 2.2);
+    }, { passive: true });
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Habillage : réaction du châssis aux changements d'état
+    // ═══════════════════════════════════════════════════════════════════
+    const COL = {
+      off:        { c: 0x2b3242, glow: 0.00 },
+      idleWo:     { c: 0x2ee6a6, glow: 0.85 },
+      idleFr:     { c: 0x5b8cff, glow: 0.85 },
+      listening:  { c: 0xff4d6d, glow: 1.30 },
+      processing: { c: 0xffbe3d, glow: 1.10 },
+      speaking:   { c: 0x63b8ff, glow: 1.20 },
+    };
+
+    let cur = COL.off, pulse = 0, flicker = 0, snap = Borne.info();
+    const tmpA = new THREE.Color(), tmpB = new THREE.Color();
+
+    function moodOf(i) {
+      if (!i.on) return COL.off;
+      if (i.state === 'listening')  return COL.listening;
+      if (i.state === 'processing') return COL.processing;
+      if (i.state === 'speaking')   return COL.speaking;
+      // Au repos, l'ambiance rappelle la dernière langue utilisée.
+      return i.lastLang === 'fr' ? COL.idleFr : COL.idleWo;
+    }
+
+    window.Chassis3D = {
+      onRender(i) {
+        const was = snap.on;
+        snap = i;
+        cur = moodOf(i);
+        if (i.on && !was) flicker = 1;            // allumage : la dalle s'amorce
+
+        // Bouton de langue : terne au repos, rouge vif quand il enregistre.
+        [['wo', 0x21c98d, 0x2c3a34], ['fr', 0x4a8cff, 0x2b3444]].forEach(([id, vif, terne]) => {
+          const u   = BY_ID[id].userData;
+          const rec = i.rec && i.micLang === id;
+          u.capMat.color.setHex(rec ? 0xff4d6d : (i.on ? vif : terne));
+          u.capMat.emissive.setHex(rec ? 0xff4d6d : vif);
+          u.ringMat.emissive.setHex(rec ? 0xff4d6d : (i.on ? vif : 0x223040));
+        });
+
+        // Marche/arrêt : acier au repos, rouge quand il sert de STOP.
+        const stop = i.rec || i.busy;
+        btnPower.userData.capMat.color.setHex(stop ? 0xff4d6d : (i.on ? 0x9fb0cc : 0x4a5464));
+        btnPower.userData.capMat.emissive.setHex(stop ? 0xff4d6d : 0x6f86ad);
+        btnPower.userData.ringMat.emissive.setHex(stop ? 0xff4d6d : (i.on ? 0x6f86ad : 0x1d2432));
+
+        document.getElementById('d-power').classList.toggle('on', i.on);
+        document.getElementById('d-voice').classList.toggle('on', !!i.rec);
+        document.getElementById('voice-label').textContent =
+          i.rec ? 'Écoute ' + (i.micLang === 'fr' ? 'FR' : 'WO') : 'Micro';
+      },
+
+      // Retour visuel des raccourcis clavier sur les boutons 3D
+      onKey(which, down) {
+        const b = BY_ID[which];
+        if (b) b.userData.target = down ? 1 : 0;
+      },
+    };
+
+    // ═══ Boucle de rendu ═══
+    const clock = new THREE.Clock();
+
+    function resize() {
+      const w = innerWidth, h = innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      css.setSize(w, h);
+      distT = fitDistance() * zoomT;
+      if (!dist) dist = distT;               // premier cadrage : pas de travelling
+    }
+    addEventListener('resize', resize);
+    resize();
+
+    function tick() {
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const t  = clock.elapsedTime;
+      pulse = (Math.sin(t * 4.2) + 1) / 2;
+
+      // Enfoncement des boutons
+      BUTTONS.forEach(b => {
+        const u = b.userData;
+        u.press += (u.target - u.press) * Math.min(1, dt * 18);
+        u.moving.position.y = -0.011 * u.press;
+      });
+
+      // Couleur d'ambiance : bandeau, diode, halo de la dalle
+      tmpA.setHex(cur.c);
+      stripMat.emissive.lerp(tmpA, Math.min(1, dt * 6));
+      ledMat.emissive.lerp(tmpA, Math.min(1, dt * 6));
+      screenGlow.color.lerp(tmpA, Math.min(1, dt * 6));
+
+      const anim = (snap.state === 'listening' || snap.state === 'processing' || snap.state === 'speaking');
+      const level = snap.state === 'listening' ? (0.55 + snap.level * 1.6) : 1;
+      const beat  = anim ? (0.55 + 0.45 * pulse) * level : (snap.on ? 0.9 : 0.25);
+
+      if (flicker > 0) { flicker = Math.max(0, flicker - dt * 2.2); }
+      const flick = flicker > 0 ? (Math.random() > 0.5 ? 0.35 : 1.25) : 1;
+
+      stripMat.emissiveIntensity = (snap.on ? 1.1 : 0.18) * beat;
+      ledMat.emissiveIntensity   = (snap.on ? 1.6 : 0.20) * beat;
+      screenGlow.intensity       = cur.glow * 3.2 * beat * flick;
+
+      // Capuchons : au repos les deux langues respirent doucement pour appeler
+      // l'usager ; celle qui enregistre bat au rythme de la voix captée.
+      ['wo', 'fr'].forEach(id => {
+        const u   = BY_ID[id].userData;
+        const rec = snap.rec && snap.micLang === id;
+        const bat = rec ? (0.5 + 0.6 * pulse) * (0.6 + snap.level * 1.6) : 1;
+        u.capMat.emissiveIntensity  = (snap.on ? 0.26 : 0.10 + 0.14 * pulse) * bat;
+        u.ringMat.emissiveIntensity = (snap.on ? 0.55 : 0.30 + 0.35 * pulse) * bat;
+      });
+
+      btnPower.userData.capMat.emissiveIntensity =
+        (snap.rec || snap.busy) ? 0.35 + 0.30 * pulse
+                                : (snap.on ? 0.22 : 0.20 + 0.30 * pulse);
+      btnPower.userData.ringMat.emissiveIntensity =
+        (snap.rec || snap.busy) ? 0.7 + 0.8 * pulse : (snap.on ? 0.5 : 0.9 * (0.4 + 0.6 * pulse));
+
+      // Caméra : glissé + léger flottement
+      zoom  += (zoomT - zoom)   * Math.min(1, dt * 5);
+      distT  = fitDistance() * zoom;
+      yaw   += (yawT - yaw)     * Math.min(1, dt * 5);
+      pitch += (pitchT - pitch) * Math.min(1, dt * 5);
+      dist  += (distT - dist)   * Math.min(1, dt * 5);
+      const y = yaw + Math.sin(t * 0.25) * 0.012;
+      const p = pitch + Math.sin(t * 0.19) * 0.006;
+      camera.position.set(
+        Math.sin(y) * Math.cos(p) * dist,
+        TARGET.y + Math.sin(p) * dist + 0.06,
+        Math.cos(y) * Math.cos(p) * dist);
+      camera.lookAt(TARGET);
+
+      renderer.render(scene, camera);
+      css.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+
+    tick();
+    document.getElementById('boot').classList.add('hide');
+    canvas.style.cursor = 'grab';
+    window.Chassis3D.onRender(Borne.info());
+  </script>
+</body>
+
+</html>

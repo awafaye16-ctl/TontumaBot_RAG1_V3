@@ -3,7 +3,7 @@
 Flux complet :
   ┌─────────────────────────────────────────────────────────────────────┐
   │  Entrée (texte ou audio)                                            │
-  │    ↓ STT si audio  [M9and2M/whisper-small-wolof]                    │
+  │    ↓ STT si audio  [wo : Wolof-HuBERT-CTC | fr : Whisper]           │
   │  Texte brut (FR ou WO)                                              │
   │    ↓ Détection de langue                                            │
   │  Si WO → traduction WO→FR  [bilalfaye/nllb]                        │
@@ -76,6 +76,46 @@ def _generate_qr_code(text: str) -> str | None:
 
 
 # =============================================================================
+#  Question de suite → requête de recherche
+# =============================================================================
+#  Le LLM reçoit l'historique et comprend « et combien ça coûte ? ». Le moteur
+#  de recherche, lui, ne voit que des mots : cherché tel quel, ce fragment ne
+#  ramène rien. On lui adjoint donc la dernière question de l'usager, mais
+#  uniquement quand la question courante est trop courte pour se suffire —
+#  au-delà, la concaténation diluerait une question déjà explicite.
+
+_MOTS_MAX_SUITE = 6
+
+
+def _sujet_courant(history) -> str | None:
+    """Dernière question de l'usager qui porte un sujet.
+
+    On remonte jusqu'à une question assez longue pour se suffire à elle-même :
+    s'ancrer sur le message précédent ne marche que si celui-ci n'était pas
+    lui-même une question de suite. Dans « extrait de naissance ? » → « et le
+    coût ? » → « où aller ? », le sujet reste l'extrait de naissance.
+    """
+    dernier = None
+    for m in reversed(history or []):
+        if m.get("role") != "user":
+            continue
+        contenu = m.get("content", "")
+        if dernier is None:
+            dernier = contenu
+        if len(contenu.split()) > _MOTS_MAX_SUITE:
+            return contenu
+    return dernier
+
+
+def _contextualize(question_fr: str, history) -> str:
+    """Requête de recherche enrichie du sujet courant si la question est courte."""
+    if not history or len(question_fr.split()) > _MOTS_MAX_SUITE:
+        return question_fr
+    sujet = _sujet_courant(history)
+    return f"{sujet} {question_fr}" if sujet else question_fr
+
+
+# =============================================================================
 #  Nettoyage markdown avant traduction NLLB
 
 
@@ -116,6 +156,7 @@ def _rag_pipeline(
     fetch_k: int  = 20,
     mmr_k: int    = 8,
     top_k: int    = 3,
+    query_embedding: Optional[list[float]] = None,
 ) -> tuple[str, dict]:
     """Exécute les 3 étapes du retrieval et retourne (contexte_fr, retrieval_trace).
 
@@ -130,7 +171,12 @@ def _rag_pipeline(
     t0 = time.perf_counter()
 
     # Embedding de la requête calculé UNE seule fois puis réutilisé partout
-    q_emb = vectorstore.embed_query(question_fr)
+    # (déjà calculé par `answer()` pour le router d'intention, le cas échéant)
+    q_emb = (
+        query_embedding
+        if query_embedding is not None
+        else vectorstore.embed_query(question_fr)
+    )
 
     # ── Étape 1 : Hybrid search (un seul passage, index BM25 + embeddings cachés)
     t_hybrid_start = time.perf_counter()
@@ -192,6 +238,8 @@ def answer(
     seed_docs: Optional[list[str]]  = None,
     seed_filtered: Optional[list[dict]] = None,
     progress: Optional[Callable[[str, dict], None]] = None,
+    lang_hint: Optional[str] = None,
+    history: Optional[list[dict]] = None,
 ) -> dict:
     """Traite une question et retourne la réponse complète avec trace.
 
@@ -204,6 +252,11 @@ def answer(
         seed_filtered:  Docs orientation pour le seed.
         progress:       Callback optionnel appelé à chaque étape avec
                         (step: str, info: dict) — utilisé par le streaming SSE.
+        lang_hint:      'wo' | 'fr' pour imposer la langue d'entrée (bouton de
+                        la borne). Sans indice, la langue est détectée.
+        history:        Mémoire conversationnelle [{role, content}] en français,
+                        pour les questions de suite. Le pipeline ne l'écrit pas :
+                        l'appelant y ajoute le tour une fois la réponse produite.
 
     Returns:
         dict {
@@ -211,6 +264,7 @@ def answer(
             response_fr:  réponse en français
             response:     réponse dans la langue de l'utilisateur
             response_wo:  réponse en wolof (si entrée wolof)
+            question_fr:  question en français (pivot) — à mémoriser par l'appelant
             audio:        chemin du fichier audio (si tts=True)
         }
     """
@@ -224,10 +278,18 @@ def answer(
             except Exception:
                 pass
 
-    # ── 1. Détection de langue ────────────────────────────────────────────
-    lang             = detect_language(unified_text)
-    trace["input_lang"] = lang
-    _emit("detect", lang=lang)
+    # ── 1. Langue d'entrée ────────────────────────────────────────────────
+    # L'indice prime sur la détection : quand l'usager a appuyé sur « Wolof »
+    # ou « Français », la langue est connue et une détection ne peut que se
+    # tromper (phrases courtes, emprunts, code-switching).
+    hint = (lang_hint or "").lower()[:2]
+    if hint in ("wo", "fr"):
+        lang, lang_source = hint, "indice"
+    else:
+        lang, lang_source = detect_language(unified_text), "détection"
+    trace["input_lang"]        = lang
+    trace["input_lang_source"] = lang_source
+    _emit("detect", lang=lang, source=lang_source)
 
     # ── 2. Traduction WO→FR si nécessaire ────────────────────────────────
     question_fr = unified_text
@@ -242,20 +304,38 @@ def answer(
         }
 
     # ── 3. Intention ──────────────────────────────────────────────────────
-    intent         = detect_intent(question_fr)
+    # L'embedding de la question sert à la fois au router d'intention et au
+    # retrieval : calculé ici une seule fois, la classification ne coûte plus
+    # que quelques produits scalaires. En cas d'échec de l'embedder, le router
+    # bascule sur ses mots-clés et le retrieval le recalculera.
+    t0 = time.perf_counter()
+    try:
+        q_emb = vectorstore.embed_query(question_fr)
+    except Exception:
+        q_emb = None
+    intent         = detect_intent(question_fr, query_embedding=q_emb)
     trace["intent"] = intent
+    trace["intent_latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     _emit("intent", intent=intent)
 
     # ── 4. RAG ────────────────────────────────────────────────────────────
     _emit("retrieval")
     n_docs = vectorstore.count()
 
+    # Une question de suite est complétée par le tour précédent avant recherche.
+    query_fr = _contextualize(question_fr, history)
+    if query_fr != question_fr:
+        trace["retrieval_query"] = query_fr
+        q_emb = None                      # l'embedding portait l'ancienne requête
+
     if n_docs > 0:
-        context_fr, retrieval_trace = _rag_pipeline(question_fr, intent)
+        context_fr, retrieval_trace = _rag_pipeline(
+            query_fr, intent, query_embedding=q_emb
+        )
         retrieval_trace["source"] = "chromadb"
     elif seed_docs:
         # Fallback seed en mémoire (démo sans base persistante)
-        context_fr, retrieval_trace = _rag_seed(question_fr, intent, seed_docs, seed_filtered)
+        context_fr, retrieval_trace = _rag_seed(query_fr, intent, seed_docs, seed_filtered)
         retrieval_trace["source"] = "seed"
     else:
         context_fr      = ""
@@ -269,16 +349,19 @@ def answer(
     _emit("llm", provider=provider)
     t0          = time.perf_counter()
     # plain=True si la réponse sera traduite en wolof (NLLB ne gère pas le markdown)
-    response_fr = generate(question_fr, context_fr, provider=provider, plain=(lang == "wo"))
+    response_fr = generate(question_fr, context_fr, provider=provider,
+                           plain=(lang == "wo"), history=history)
     trace["llm"] = {
         "provider":   provider,
         "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+        "history_messages": len(history or []),
     }
 
     response = {
         "trace":       trace,
         "response_fr": response_fr,
         "response":    response_fr,
+        "question_fr": question_fr,     # version pivot, à mémoriser
     }
 
     # ── QR Code pour les procédures ──────────────────────────────────────────

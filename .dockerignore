@@ -1,0 +1,54 @@
+# ── Environnements virtuels (jamais dans l'image) ────────────────────────────
+venv/
+venv311/
+env/
+.venv/
+
+# ── Git / IDE / système ──────────────────────────────────────────────────────
+.git/
+.gitignore
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# ── Secrets : le .env est fourni au conteneur via env_file, pas copié ───────
+.env
+
+# ── Poids des modèles : téléchargés dans des volumes au runtime ─────────────
+*.safetensors
+*.bin
+*.ckpt
+*.h5
+*.pt
+*.pth
+*.msgpack
+src/stt_wolof-hubert-ctc/
+src/Wo_fr_bilalfayenllb-200-distilled-600M-wo-fr-en/
+src/Fr-Wo_Lahadnllb200-francais-wolof/
+
+# ── Données et artefacts d'exécution (volumes) ──────────────────────────────
+data/chroma/
+uploads/
+resultats_ragas/
+static/*.wav
+static/*.mp3
+
+# Exception : le voice prompt du TTS doit voyager dans l'image (tts.py le
+# cherche en BASE_DIR/8_1_c.wav pour le voice cloning).
+!8_1_c.wav
+
+# ── Notebooks, docs et images : inutiles à l'exécution ──────────────────────
+*.ipynb
+*.png
+API.md
+PROMPT_V3.md
+certs/

@@ -14,7 +14,7 @@ V3/
 ├── requirements.txt
 ├── .env / .env.example
 ├── download_models.py              # Script de téléchargement des modèles HF
-├── wolof-whisper-small-lora/       # Poids STT locaux (M9and2M/whisper-small-wolof)
+├── src/stt_wolof-hubert-ctc/       # Poids STT locaux (soynade-research/Wolof-HuBERT-CTC)
 ├── static/
 │   ├── index.html                  # Interface chat
 │   └── admin.html                  # Interface admin RAG
@@ -33,7 +33,7 @@ V3/
     ├── translation/
     │   └── nllb.py                 # Traduction WO↔FR via NLLB
     ├── input/
-    │   └── stt.py                  # Transcription audio (Whisper)
+    │   └── stt.py                  # Transcription audio (wolof CTC / français Whisper)
     ├── intent/
     │   └── router.py               # Routeur d'intention (procedure | orientation)
     ├── retrieval/
@@ -54,7 +54,7 @@ V3/
 
 ```
 Entrée (texte ou audio)
-  ↓ STT si audio          [M9and2M/whisper-small-wolof, 242M params]
+  ↓ STT si audio          [wo : Wolof-HuBERT-CTC 95M · fr : Whisper]
 Texte brut (WO ou FR)
   ↓ Détection langue       [dict de mots wolof ~120 mots spécifiques]
   Si WO → Traduction WO→FR [bilalfaye/nllb-200-distilled-600M-wo-fr-en]
@@ -77,7 +77,8 @@ Réponse JSON
 
 | Rôle                  | Modèle HF                                                     | Stockage                          |
 | --------------------- | ------------------------------------------------------------- | --------------------------------- |
-| STT wolof             | `M9and2M/whisper-small-wolof`                                 | Local `wolof-whisper-small-lora/` |
+| STT wolof             | `soynade-research/Wolof-HuBERT-CTC`                           | Local `src/stt_wolof-hubert-ctc/` |
+| STT français          | `openai/whisper-small` (ou `whisper-large-v3-turbo`)          | Cache HuggingFace |
 | Traduction WO→FR      | `bilalfaye/nllb-200-distilled-600M-wo-fr-en`                  | Local `src/Wo_fr_bilalfaye.../`   |
 | Traduction FR→WO      | `Lahad/nllb200-francais-wolof`                                | Local `src/Fr-Wo_Lahad.../`       |
 | Embeddings            | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Cache HF                          |
@@ -137,8 +138,9 @@ Réponse JSON
 - CPU par défaut, GPU si disponible
 
 ### `src/input/stt.py`
-- Chargement lazy de Whisper (au premier appel audio)
-- Chargement depuis dossier local `STT_MODEL_PATH` en priorité, sinon Hub HF
+- Chargement lazy du modèle CTC (au premier appel audio)
+- Wolof : dossier local `STT_WO_MODEL` en priorité, sinon Hub HF
+- Français : `STT_FR_MODEL` (Whisper), chargé au premier appui sur « Français »
 - Resample audio à 16 kHz via `librosa` (supporte WAV, MP3, M4A, WebM)
 - Langue forcée optionnelle via `forced_decoder_ids`
 
@@ -231,7 +233,8 @@ NLLB_WO_FR_MODEL=bilalfaye/nllb-200-distilled-600M-wo-fr-en
 NLLB_FR_WO_MODEL=Lahad/nllb200-francais-wolof
 
 # ── STT ───────────────────────────────────────────────
-STT_MODEL_PATH=./wolof-whisper-small-lora
+STT_WO_MODEL=./src/stt_wolof-hubert-ctc
+STT_FR_MODEL=openai/whisper-small
 STT_LANGUAGE=
 
 # ── Embeddings ────────────────────────────────────────
@@ -306,7 +309,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Renseigner GROQ_API_KEY et/ou GEMINI_API_KEY dans .env
 
-# 5. Télécharger les modèles locaux (NLLB WO↔FR + STT Whisper)
+# 5. Télécharger les modèles locaux (NLLB WO↔FR + STT HuBERT-CTC)
 python download_models.py
 
 # 6. Lancer le serveur

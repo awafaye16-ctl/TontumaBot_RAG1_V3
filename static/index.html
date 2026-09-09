@@ -626,12 +626,20 @@
     </div>
 
     <input type="file" id="file-image" accept="image/*" hidden>
+    <input type="file" id="file-audio" accept="audio/*" capture hidden>
     <div class="toast" id="toast"></div>
   </div>
 
   <script>
     const $ = id => document.getElementById(id);
     const chat = $('chat');
+
+    // Mémoire conversationnelle : une session par onglet, réinitialisée côté
+    // serveur tous les 10 messages.
+    const SESSION_ID = (() => {
+      try { return crypto.randomUUID(); }
+      catch (_) { return 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
+    })();
 
     // ---- état LLM ----
     (async () => {
@@ -800,7 +808,7 @@
         const res = await fetch('/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: text, tts })
+          body: JSON.stringify({ question: text, tts, session_id: SESSION_ID })
         });
         await consumeSSE(res, {
           onStatus: d => updateTyping(d.step),
@@ -821,6 +829,7 @@
       const fd = new FormData();
       fd.append('file', file);
       fd.append('tts', $('tts').checked);
+      fd.append('session_id', SESSION_ID);
       try {
         const res = await fetch(endpoint, { method: 'POST', body: fd });
         await consumeSSE(res, {
@@ -872,6 +881,41 @@
     const recBtn = $('btn-audio'), recTimer = $('rec-timer');
     let mediaRecorder = null, chunks = [], recStart = 0, recTimerId = null;
 
+    // Repli universel quand MediaRecorder est indisponible : l'input `capture`
+    // ouvre l'enregistreur natif du téléphone, et le sélecteur de fichier
+    // ailleurs. Fonctionne sur tous les navigateurs, y compris en HTTP.
+    const audioInput = $('file-audio');
+    audioInput.addEventListener('change', () => {
+      const f = audioInput.files[0];
+      if (!f) return;
+      $('fileinfo').textContent = 'Fichier prêt : ' + f.name + ' (' + (f.size / 1024).toFixed(0) + ' Ko)';
+      $('fileinfo').classList.add('show');
+      sendFile('/ask/audio', f, 'Transcription vocale en cours…');
+      audioInput.value = '';
+    });
+
+    // Chaque navigateur impose son conteneur : Chrome/Edge → webm/opus,
+    // Firefox → ogg/opus, Safari → mp4/aac. On laisse le navigateur choisir son
+    // défaut et on en déduit seulement l'extension : le backend décode les trois
+    // (librosa → ffmpeg).
+    function extPourType(type) {
+      if (!type) return 'webm';
+      if (type.includes('mp4') || type.includes('aac')) return 'm4a';
+      if (type.includes('ogg')) return 'ogg';
+      return 'webm';
+    }
+
+    // `navigator.mediaDevices` n'existe que dans un contexte sécurisé (HTTPS,
+    // ou http://localhost selon le navigateur). Distinguer ce cas d'un vrai
+    // défaut de support évite un message trompeur.
+    function raisonMicroIndisponible() {
+      if (!window.isSecureContext) {
+        return "l'enregistrement direct exige une origine sécurisée (HTTPS). "
+             + "En HTTP il n'est possible que sur localhost, et Safari refuse même là.";
+      }
+      return "ce navigateur ne gère pas l'enregistrement direct.";
+    }
+
     function fmtTime(ms) {
       const s = Math.floor(ms / 1000);
       const m = Math.floor(s / 60), r = s % 60;
@@ -881,7 +925,8 @@
     async function toggleRecord() {
       if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
       if (!navigator.mediaDevices || !window.MediaRecorder) {
-        toast('Micro non supporté par ce navigateur');
+        toast('🎙️ Micro : ' + raisonMicroIndisponible() + ' Envoyez un fichier audio à la place.');
+        audioInput.click();
         return;
       }
       try {
@@ -890,12 +935,15 @@
         mediaRecorder = new MediaRecorder(stream);
         mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
         mediaRecorder.onstop = () => {
-          const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          // `mimeType` peut être vide sur certains navigateurs : on retombe sur
+          // webm plutôt que de laisser un `.includes()` lever une exception.
+          const type = mediaRecorder.mimeType || 'audio/webm';
+          const blob = new Blob(chunks, { type });
           stream.getTracks().forEach(t => t.stop());
           recBtn.classList.remove('rec');
           recTimer.textContent = 'micro';
           clearInterval(recTimerId);
-          const file = new File([blob], 'microphone.' + (mediaRecorder.mimeType.includes('mp4') ? 'm4a' : 'webm'), { type: mediaRecorder.mimeType || 'audio/webm' });
+          const file = new File([blob], 'microphone.' + extPourType(type), { type });
           sendFile('/ask/audio', file, 'Transcription vocale en cours…');
         };
         mediaRecorder.start();
@@ -905,7 +953,8 @@
         recTimerId = setInterval(() => recTimer.textContent = fmtTime(Date.now() - recStart), 250);
         toast('🎙️ Enregistrement… recliquez pour arrêter');
       } catch (e) {
-        toast('❌ Micro inaccessible : ' + e.message);
+        // NotAllowedError = permission refusée, NotFoundError = aucun micro.
+        toast('❌ Micro inaccessible (' + (e.name || 'erreur') + ') : ' + e.message);
       }
     }
     function stopRecording() {

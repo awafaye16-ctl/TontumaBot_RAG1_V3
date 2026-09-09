@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from config import settings
 from pipeline import answer as pipeline_answer
 from seed_docs import get_documents
+import memory
 import vectorstore
 import ingestion
 
@@ -52,6 +53,12 @@ def _warmup() -> None:
     _step("embedder", vectorstore.get_embedder)
     _step("corpus/bm25", vectorstore._get_corpus)
 
+    # Prototypes du router d'intention (réutilisent l'embedder ci-dessus)
+    def _intent():
+        from intent.router import load_prototypes
+        load_prototypes()
+    _step("intent", _intent)
+
     # Reranker cross-encoder
     def _reranker():
         from retrieval.reranker import load_model
@@ -64,12 +71,20 @@ def _warmup() -> None:
         _load_model()
     _step("nllb", _nllb)
 
-    # STT (Whisper wolof) — optionnel
+    # STT wolof (HuBERT-CTC) — optionnel
     if settings.WARMUP_STT:
-        def _stt():
-            from input.stt import load_model
-            load_model()
-        _step("stt", _stt)
+        def _stt_wo():
+            from input.stt import load_model, WOLOF
+            load_model(WOLOF)
+        _step("stt/wo", _stt_wo)
+
+        # Le moteur français (Whisper) est plus lourd : préchargé seulement si
+        # STT_WARMUP_FR=true, sinon chargé au premier appui sur « Français ».
+        if settings.STT_WARMUP_FR:
+            def _stt_fr():
+                from input.stt import load_model, FRANCAIS
+                load_model(FRANCAIS)
+            _step("stt/fr", _stt_fr)
 
     # TTS (Oolel-Voices) — optionnel
     if settings.WARMUP_TTS:
@@ -117,6 +132,8 @@ class AskRequest(BaseModel):
     question:   str
     provider:   str | None = None   # groq | gemini | local
     tts:        bool        = False
+    lang:       str | None = None   # 'wo' | 'fr' — sinon détection automatique
+    session_id: str | None = None   # mémoire conversationnelle de cette session
 
 
 class RagasRequest(BaseModel):
@@ -147,7 +164,8 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
+async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
+                        lang_hint: str | None = None, session_id: str | None = None):
     """Exécute le pipeline (dans un thread) et streame la progression en SSE.
 
     Le pipeline synchrone tourne dans un executor ; ses callbacks `progress`
@@ -155,6 +173,11 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
     """
     loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
+
+    # La mémoire est lue avant le tour et complétée après : le pipeline reste
+    # sans état, l'historique appartient à la session.
+    conv    = memory.get(session_id)
+    history = conv.history() if conv else None
 
     def progress(step: str, info: dict):
         loop.call_soon_threadsafe(q.put_nowait, ("status", {"step": step, **info}))
@@ -166,9 +189,11 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
                 provider      = provider,
                 tts           = tts,
                 tts_out       = tts_out,
+                lang_hint     = lang_hint,
                 seed_docs     = SEED_DOCS,
                 seed_filtered = SEED_FILTERED,
                 progress      = progress,
+                history       = history,
             )
             loop.call_soon_threadsafe(q.put_nowait, ("result", result))
         except Exception as e:  # noqa: BLE001
@@ -187,6 +212,18 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
         event, data = item
         if event == "result":
             trace      = data.get("trace", {})
+
+            # Mémorisation du tour, en français (langue pivot du pipeline).
+            memoire = None
+            if conv is not None:
+                vide = conv.add_exchange(data.get("question_fr") or question,
+                                         data.get("response_fr") or "")
+                memoire = {
+                    "count": len(conv.messages),
+                    "max":   conv.snapshot()["max"],
+                    "reset": vide,
+                }
+
             audio_path = data.get("audio")
             audio_url  = (
                 f"/static/{os.path.basename(audio_path)}"
@@ -199,6 +236,7 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
                 "qr_code":     data.get("qr_code"),
                 "audio_url":   audio_url,
                 "lang":        trace.get("input_lang"),
+                "memory":      memoire,
                 "trace":       trace,
             })
         else:
@@ -207,15 +245,19 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str):
     yield _sse("done", {})
 
 
-async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: str):
-    """Variante audio : STT (dans un thread) puis pipeline SSE."""
+async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: str,
+                              lang: str = "wo", session_id: str | None = None):
+    """Variante audio : STT dans la langue demandée, puis pipeline SSE.
+
+    `lang` vient du bouton pressé sur la borne ('wo' ou 'fr') : il choisit le
+    moteur STT et sert ensuite d'indice de langue au pipeline, ce qui évite une
+    détection automatique inutile — et parfois fausse — sur la transcription.
+    """
     loop = asyncio.get_running_loop()
-    yield _sse("status", {"step": "stt"})
+    yield _sse("status", {"step": "stt", "lang": lang})
     try:
         from input.stt import transcribe
-        text = await loop.run_in_executor(
-            None, lambda: transcribe(tmp_path, language=settings.STT_LANGUAGE or None)
-        )
+        text = await loop.run_in_executor(None, lambda: transcribe(tmp_path, language=lang))
     except Exception as e:  # noqa: BLE001
         yield _sse("error", {"message": f"STT échoué : {e}"})
         yield _sse("done", {})
@@ -226,7 +268,8 @@ async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: 
         yield _sse("done", {})
         return
 
-    async for chunk in _pipeline_sse(text, provider, tts, tts_out):
+    async for chunk in _pipeline_sse(text, provider, tts, tts_out,
+                                     lang_hint=lang, session_id=session_id):
         yield chunk
 
 
@@ -237,6 +280,19 @@ async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: 
 @app.get("/")
 def index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+@app.get("/borne")
+def borne():
+    """Interface borne : simulation 3D (three.js) d'un terminal physique à deux
+    boutons — commande vocale on/off et start/stop."""
+    return FileResponse(os.path.join(STATIC_DIR, "borne.html"))
+
+
+@app.get("/borne/simple")
+def borne_simple():
+    """Même borne, châssis dessiné en CSS : repli sans WebGL ni CDN."""
+    return FileResponse(os.path.join(STATIC_DIR, "borne-simple.html"))
 
 
 @app.get("/admin")
@@ -253,10 +309,16 @@ def health():
         "llm_ready":    settings.llm_ready,
         "tts":          "oolel-voices",
         "nllb_model":   settings.NLLB_WO_FR_MODEL,
-        "stt_model":    settings.STT_MODEL_PATH,
+        "stt_wo":       settings.STT_WO_MODEL,
+        "stt_fr":       settings.STT_FR_MODEL,
         "reranker":     settings.RERANKER_MODEL,
         "n_documents":  len(vectorstore.all_documents()),
         "n_chunks":     vectorstore.count(),
+        "memory": {
+            "enabled":      settings.MEMORY_ENABLED,
+            "max_messages": settings.MEMORY_MAX_MESSAGES,
+            "sessions":     memory.sessions(),
+        },
     }
 
 
@@ -277,7 +339,8 @@ async def ask(req: AskRequest):
     provider = req.provider or settings.LLM_PROVIDER
     tts_out  = os.path.join(STATIC_DIR, f"response_{uuid.uuid4().hex[:8]}.wav")
     return StreamingResponse(
-        _pipeline_sse(req.question.strip(), provider, req.tts, tts_out),
+        _pipeline_sse(req.question.strip(), provider, req.tts, tts_out,
+                      lang_hint=req.lang, session_id=req.session_id),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
@@ -290,11 +353,14 @@ async def ask_audio(
     file:       UploadFile     = File(...),
     tts:        bool           = Form(False),
     provider:   str | None     = Form(None),
+    lang:       str            = Form("wo"),
+    session_id: str | None     = Form(None),
 ):
     """Audio (WAV, MP3, M4A, WebM) → STT → pipeline RAG → réponse SSE + TTS optionnel.
 
-    Le STT utilise M9and2M/whisper-small-wolof. La langue est détectée
-    automatiquement sur la transcription. La réponse est streamée en SSE.
+    `lang` sélectionne le moteur STT : 'wo' → soynade-research/Wolof-HuBERT-CTC
+    (décodage CTC), 'fr' → Whisper (STT_FR_MODEL). Cette même langue est passée
+    au pipeline comme indice, la réponse est streamée en SSE.
     """
     # Sauvegarde du fichier uploadé
     safe_name = os.path.basename(file.filename or "audio.wav")
@@ -305,10 +371,35 @@ async def ask_audio(
     provider = provider or settings.LLM_PROVIDER
     tts_out  = os.path.join(STATIC_DIR, f"response_{uuid.uuid4().hex[:8]}.wav")
     return StreamingResponse(
-        _audio_pipeline_sse(tmp_path, provider, tts, tts_out),
+        _audio_pipeline_sse(tmp_path, provider, tts, tts_out, lang=lang,
+                            session_id=session_id),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
+
+
+# ── Mémoire conversationnelle ─────────────────────────────────────────────
+
+@app.get("/session/{session_id}")
+def get_session(session_id: str):
+    """Tableau de messages de la session — [{role, content}]."""
+    snap = memory.snapshot(session_id)
+    if snap is None:
+        return {"session_id": session_id, "messages": [], "count": 0,
+                "max": settings.MEMORY_MAX_MESSAGES, "resets": 0, "total": 0}
+    return snap
+
+
+@app.post("/session/{session_id}/reset")
+def reset_session(session_id: str):
+    """Vide la mémoire sans supprimer la session."""
+    return {"ok": True, "existed": memory.reset(session_id)}
+
+
+@app.delete("/session/{session_id}")
+def delete_session(session_id: str):
+    """Oublie la session (fin de session sur la borne)."""
+    return {"ok": True, "existed": memory.forget(session_id)}
 
 
 # ── Traduction ────────────────────────────────────────────────────────────
@@ -457,4 +548,15 @@ def eval_ragas(req: RagasRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=settings.HOST, port=settings.PORT)
+
+    # HTTPS si un certificat est configuré : indispensable pour que le micro
+    # soit accessible ailleurs que sur localhost (cf. SSL_CERTFILE dans .env).
+    ssl_options = {}
+    if settings.ssl_enabled:
+        ssl_options = {
+            "ssl_certfile": settings.SSL_CERTFILE,
+            "ssl_keyfile":  settings.SSL_KEYFILE,
+        }
+        print(f"[serveur] HTTPS activé → https://{settings.HOST}:{settings.PORT}")
+
+    uvicorn.run(app, host=settings.HOST, port=settings.PORT, **ssl_options)

@@ -15,7 +15,7 @@ safetensors
 # bilalfaye/nllb-200-distilled-600M-wo-fr-en (WO→FR et FR→WO)
 
 # ── STT ───────────────────────────────────────────────────────────────────────
-# M9and2M/whisper-small-wolof — chargé via transformers depuis dossier local
+# soynade-research/Wolof-HuBERT-CTC — chargé via transformers depuis dossier local
 librosa>=0.10.2       # chargement audio multi-format
 
 # ── RAG ───────────────────────────────────────────────────────────────────────

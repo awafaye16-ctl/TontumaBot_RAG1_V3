@@ -1,98 +1,184 @@
-"""STT V3 — Transcription audio wolof.
+"""STT V3 — Transcription audio bilingue wolof / français.
 
-Modèle retenu après benchmark : M9and2M/whisper-small-wolof
-  → Fine-tuné spécifiquement sur le wolof, 242M paramètres.
-  → Chargé depuis le dossier local `wolof-whisper-small-lora/` (déjà cloné en V3/)
-    OU téléchargé depuis HuggingFace Hub si le dossier local est absent.
+Deux moteurs spécialisés, choisis par l'appelant (bouton de la borne) :
 
-Le modèle est chargé une seule fois (lazy loading) et reste en mémoire.
+  wolof    soynade-research/Wolof-HuBERT-CTC
+           HuBERT base fine-tuné en CTC (95M params, WER 0,357). Décodage en
+           une passe, ~1,4 s pour 25 s d'audio sur CPU.
+
+  français STT_FR_MODEL, par défaut openai/whisper-large-v3-turbo
+           Whisper encodeur-décodeur, langue forcée à `fr`.
+
+Pourquoi deux modèles plutôt qu'un Whisper multilingue : le wolof ne fait pas
+partie des langues de Whisper — un modèle généraliste y produit du charabia,
+alors que le CTC wolof est à la fois meilleur et plus rapide. Inversement le
+CTC wolof ne sait pas transcrire le français.
+
+Chaque moteur est chargé à la demande et reste en mémoire.
 """
+import json
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from config import settings  # noqa: E402
 
-_model     = None
-_processor = None
-_SOURCE    = None
+WOLOF    = "wo"
+FRANCAIS = "fr"
 
-# Identifiant Hub en cas de téléchargement automatique
-_HUB_MODEL_ID = "M9and2M/whisper-small-wolof"
+# Identifiant Hub du modèle wolof, si le dossier local est absent ou invalide
+_HUB_WO_MODEL = "soynade-research/Wolof-HuBERT-CTC"
+
+# Découpage des longs enregistrements. Le pipeline HF découpe en fenêtres et
+# recolle les sorties (pas de mot coupé aux jointures).
+_CHUNK_S  = 20
+_STRIDE_S = (4, 2)
+
+# Pipelines ASR construits à la demande, par langue
+_engines: dict[str, object] = {}
+_sources: dict[str, str]    = {}
 
 
-def load_model():
-    """Charge le modèle STT une seule fois.
+def _device_index() -> int:
+    """0 si CUDA est disponible, -1 (CPU) sinon.
 
-    Priorité :
-      1. Dossier local STT_MODEL_PATH (wolof-whisper-small-lora/)
-      2. Téléchargement automatique depuis Hub (M9and2M/whisper-small-wolof)
+    On ne bascule pas sur MPS : les convolutions de l'extracteur de features y
+    restent capricieuses, et le CPU suffit pour ces tailles de modèle.
     """
-    global _model, _processor, _SOURCE
-    if _model is not None:
-        return _model, _processor
+    import torch
+    return 0 if torch.cuda.is_available() else -1
 
-    from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
-    local_path = settings.STT_MODEL_PATH
-    if local_path and os.path.isdir(local_path):
-        print(f"[STT] Chargement depuis dossier local : {local_path}")
-        src = local_path
+def _is_hubert_ctc(path: str) -> bool:
+    """Le dossier contient-il bien un checkpoint HuBERT-CTC ?
+
+    Évite l'erreur obscure quand STT_WO_MODEL pointe encore sur un ancien
+    checkpoint Whisper : on retombe alors proprement sur le Hub.
+    """
+    cfg = os.path.join(path, "config.json")
+    if not os.path.isfile(cfg):
+        return False
+    try:
+        with open(cfg, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+    archs = data.get("architectures") or []
+    return data.get("model_type") == "hubert" and any(a.endswith("ForCTC") for a in archs)
+
+
+# =============================================================================
+#  Moteur wolof — HuBERT-CTC
+# =============================================================================
+
+def _build_wolof():
+    from transformers import HubertForCTC, Wav2Vec2Processor, pipeline
+
+    local = settings.STT_WO_MODEL
+    if local and os.path.isdir(local) and _is_hubert_ctc(local):
+        src = local
+        print(f"[STT/wo] Chargement depuis dossier local : {src}")
     else:
-        print(f"[STT] Dossier local introuvable ({local_path}).")
-        print(f"[STT] Téléchargement depuis Hub : {_HUB_MODEL_ID} ...")
-        src = _HUB_MODEL_ID
+        if local and os.path.isdir(local):
+            print(f"[STT/wo] {local} n'est pas un checkpoint HuBERT-CTC — ignoré.")
+        src = _HUB_WO_MODEL
+        print(f"[STT/wo] Téléchargement depuis Hub : {src} ...")
 
-    _processor = WhisperProcessor.from_pretrained(src)
-    _model     = WhisperForConditionalGeneration.from_pretrained(src)
-    _SOURCE    = src
-    print(f"[STT] Modèle prêt ({src}).")
-    return _model, _processor
+    processor = Wav2Vec2Processor.from_pretrained(src)
+    model     = HubertForCTC.from_pretrained(src)
+    model.eval()
+
+    _sources[WOLOF] = src
+    return pipeline(
+        task              = "automatic-speech-recognition",
+        model             = model,
+        tokenizer         = processor.tokenizer,
+        feature_extractor = processor.feature_extractor,
+        chunk_length_s    = _CHUNK_S,
+        stride_length_s   = _STRIDE_S,
+        device            = _device_index(),
+    )
+
+
+# =============================================================================
+#  Moteur français — Whisper
+# =============================================================================
+
+def _build_francais():
+    from transformers import pipeline
+
+    src = settings.STT_FR_MODEL
+    print(f"[STT/fr] Chargement de {src} ...")
+
+    # Whisper encode toujours une fenêtre de 30 s : inutile de la fractionner
+    # davantage, on aligne le découpage sur cette fenêtre native.
+    asr = pipeline(
+        task           = "automatic-speech-recognition",
+        model          = src,
+        chunk_length_s = 30,
+        device         = _device_index(),
+    )
+
+    # Les checkpoints Whisper embarquent des `forced_decoder_ids` hérités ; ils
+    # entrent en conflit avec la langue qu'on impose à chaque appel.
+    try:
+        asr.model.generation_config.forced_decoder_ids = None
+    except AttributeError:
+        pass
+
+    _sources[FRANCAIS] = src
+    return asr
+
+
+_BUILDERS = {WOLOF: _build_wolof, FRANCAIS: _build_francais}
+
+
+def load_model(language: str = WOLOF):
+    """Charge (une seule fois) le moteur d'une langue et le retourne.
+
+    Appelé par le warm-up au démarrage du serveur et par `transcribe`.
+    """
+    lang = FRANCAIS if str(language).lower().startswith("fr") else WOLOF
+    if lang not in _engines:
+        _engines[lang] = _BUILDERS[lang]()
+        print(f"[STT/{lang}] Modèle prêt ({_sources.get(lang, settings.STT_FR_MODEL)}).")
+    return _engines[lang]
 
 
 def transcribe(audio_path: str, language: str = None) -> str:
-    """Transcrit un fichier audio en texte.
+    """Transcrit un fichier audio.
 
-    audio_path : chemin vers le fichier audio (wav, mp3, m4a, webm…)
-    language   : code langue facultatif ('wo' pour forcer le wolof)
+    audio_path : chemin du fichier (wav, mp3, m4a, webm, ogg…)
+    language   : 'wo' (défaut) ou 'fr' — sélectionne le moteur. Sur la borne,
+                 la valeur vient du bouton sur lequel l'usager a appuyé.
 
-    Utilise librosa pour le chargement audio (supporte tous les formats
-    grâce à soundfile/audioread) et le processor Whisper pour les features.
+    Le chargement audio passe par librosa (soundfile/audioread), qui accepte
+    tous les conteneurs produits par les navigateurs.
     """
-    import torch
     import librosa
 
-    model, processor = load_model()
+    lang = FRANCAIS if str(language or settings.STT_LANGUAGE).lower().startswith("fr") else WOLOF
 
-    # Chargement et resample à 16 kHz (format attendu par Whisper)
     audio, _ = librosa.load(audio_path, sr=16000, mono=True)
+    if audio.size == 0:
+        return ""
 
-    # Extraction des features d'entrée
-    inputs = processor(audio, sampling_rate=16000, return_tensors="pt")
-    input_features = inputs.input_features
+    asr    = load_model(lang)
+    kwargs = {"generate_kwargs": {"language": "french", "task": "transcribe"}} if lang == FRANCAIS else {}
+    result = asr({"raw": audio, "sampling_rate": 16000}, **kwargs)
+    return (result.get("text") or "").strip()
 
-    # Génération avec langue forcée si fournie
-    gen_kwargs = {}
-    if language:
-        try:
-            forced_ids = processor.get_decoder_prompt_ids(language=language, task="transcribe")
-            gen_kwargs["forced_decoder_ids"] = forced_ids
-        except Exception:
-            pass  # si la langue n'est pas reconnue, on laisse Whisper détecter
 
-    with torch.no_grad():
-        predicted_ids = model.generate(input_features, **gen_kwargs)
-
-    transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-    return transcription.strip()
+def source(language: str = WOLOF) -> str:
+    """Identifiant du checkpoint effectivement chargé pour cette langue."""
+    lang = FRANCAIS if str(language).lower().startswith("fr") else WOLOF
+    return _sources.get(lang, settings.STT_FR_MODEL if lang == FRANCAIS else settings.STT_WO_MODEL)
 
 
 if __name__ == "__main__":
     import sys as _sys
     if len(_sys.argv) < 2:
-        print("Usage : python stt.py <audio_path> [language]")
+        print("Usage : python stt.py <audio_path> [wo|fr]")
         _sys.exit(1)
-    audio = _sys.argv[1]
-    lang  = _sys.argv[2] if len(_sys.argv) > 2 else None
-    text  = transcribe(audio, language=lang)
-    print(f"[STT] Transcription : {text}")
+    lang = _sys.argv[2] if len(_sys.argv) > 2 else WOLOF
+    print(f"[STT/{lang}] Transcription : {transcribe(_sys.argv[1], language=lang)}")

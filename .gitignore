@@ -27,11 +27,9 @@ env/
 data/chroma/
 
 # ── Modèles locaux téléchargés ────────────────────────────────────────────────
-src/stt_wolof-whisper-small-lora/
+src/stt_wolof-hubert-ctc/
 src/Wo_fr_bilalfayenllb-200-distilled-600M-wo-fr-en/
 src/Fr-Wo_Lahadnllb200-francais-wolof/
-wolof-whisper-small-lora/*.safetensors
-wolof-whisper-small-lora/*.bin
 
 # ── Fichiers audio générés ────────────────────────────────────────────────────
 *.wav

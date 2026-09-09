@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  TontumaBot V3
+#
+#  Sur une machine neuve :  ./setup.sh          (fait tout, de bout en bout)
+#
+#  À la main :
+#    1) cp .env.example .env  puis renseigner GROQ_API_KEY (ou GEMINI_API_KEY)
+#    2) docker compose build
+#    3) docker compose run --rm download-models   # ~4 Go, une seule fois
+#    4) docker compose up -d
+#       → http://localhost:8008/borne
+#
+#  HF_CACHE_DIR (.env) pointe sur le cache HuggingFace à partager avec l'hôte.
+#  setup.sh le règle sur ~/.cache/huggingface pour éviter tout retéléchargement.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  api:
+    build: .
+    image: tontumabot-v3:latest
+    container_name: tontumabot-v3
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8008"
+    ports:
+      - "${PORT:-8008}:8008"
+    volumes:
+      # Cache HuggingFace partagé avec l'hôte : les modèles déjà téléchargés
+      # ne le sont pas une seconde fois. Chemin réglable via HF_CACHE_DIR
+      # dans .env (setup.sh le renseigne).
+      - ${HF_CACHE_DIR:-./docker/hf-cache}:/app/.cache/huggingface
+      # STT wolof : .env pointe sur ./src/stt_wolof-hubert-ctc
+      - ./src/stt_wolof-hubert-ctc:/app/src/stt_wolof-hubert-ctc:ro
+      # Base vectorielle ChromaDB : le conteneur voit le corpus indexé.
+      # Ne pas lancer l'app en natif ET en conteneur en même temps — deux
+      # écrivains sur le même SQLite.
+      - ./data/chroma:/app/data/chroma
+      # Audios reçus de la borne et documents administrés
+      - uploads:/app/uploads
+      # Certificats HTTPS optionnels (SSL_CERTFILE / SSL_KEYFILE dans .env)
+      - ./certs:/app/certs:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      # Le warm-up charge tous les modèles : compter plusieurs minutes sur CPU
+      start_period: 300s
+      retries: 3
+
+  # Service à la demande : télécharge les poids dans les volumes, puis sort.
+  #   docker compose run --rm download-models
+  download-models:
+    build: .
+    image: tontumabot-v3:latest
+    profiles: ["setup"]
+    env_file: .env
+    volumes:
+      # Écrit dans le cache et l'arborescence src/ de l'hôte : les poids
+      # servent aussi bien au conteneur qu'à une exécution native.
+      - ${HF_CACHE_DIR:-./docker/hf-cache}:/app/.cache/huggingface
+      - ./src:/app/src
+    command: ["python", "download_models.py"]
+
+volumes:
+  uploads:

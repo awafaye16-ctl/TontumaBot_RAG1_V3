@@ -3,7 +3,8 @@
 Modèles sélectionnés après benchmark :
   - WO→FR : bilalfaye/nllb-200-distilled-600M-wo-fr-en
   - FR→WO : bilalfaye/nllb-200-distilled-600M-wo-fr-en (même modèle)
-  - STT    : M9and2M/whisper-small-wolof  (local : wolof-whisper-small-lora/)
+  - STT wo : soynade-research/Wolof-HuBERT-CTC (local : src/stt_wolof-hubert-ctc/)
+  - STT fr : openai/whisper-large-v3-turbo
   - TTS    : Oolel-Voices (soynade-research/Oolel-Voices)
   - LLM    : Qwen/Qwen2.5-7B-Instruct (local 4bit) ou Groq/Gemini (API)
 """
@@ -43,6 +44,23 @@ def _env_bool(key: str, default: bool) -> bool:
     return os.getenv(key, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
 
+# ── Résolution du checkpoint STT ─────────────────────────────────────────
+_STT_HUB_ID  = "soynade-research/Wolof-HuBERT-CTC"
+_STT_WEIGHTS = ("model.safetensors", "pytorch_model.bin")
+
+
+def _stt_local_valid(path: Path) -> bool:
+    """Le dossier contient-il config.json ET au moins un fichier de poids ?"""
+    return ((path / "config.json").exists()
+            and any((path / w).exists() for w in _STT_WEIGHTS))
+
+
+def _resolve_stt_path() -> str:
+    """Dossier local du modèle STT s'il est complet, sinon l'identifiant Hub."""
+    local = BASE_DIR / "src" / "stt_wolof-hubert-ctc"
+    return str(local) if _stt_local_valid(local) else _STT_HUB_ID
+
+
 class Settings:
     BASE_DIR = BASE_DIR
 
@@ -68,50 +86,33 @@ class Settings:
     # Nombre de beams pour la traduction : 2 = qualité, 1 = greedy (plus rapide)
     NLLB_NUM_BEAMS = int(os.getenv("NLLB_NUM_BEAMS", "2"))
 
-    # ── STT ───────────────────────────────────────────────────────────────
-    # Priorité : dossier local src/stt_wolof-whisper-small-lora/
-    #            puis wolof-whisper-small-lora/ (déjà cloné en V3/)
-    #            puis Hub M9and2M/whisper-small-wolof
+    # ── STT — un moteur par langue ────────────────────────────────────────
+    # Wolof : dossier local src/stt_wolof-hubert-ctc/, sinon le Hub.
+    # (STT_MODEL_PATH reste accepté : c'est l'ancien nom de STT_WO_MODEL.)
+    STT_WO_MODEL = os.getenv("STT_WO_MODEL",
+                             os.getenv("STT_MODEL_PATH", _resolve_stt_path()))
 
-    @staticmethod
-    def _stt_local_valid(path: "Path") -> bool:
-        """Vérifie que le dossier contient config.json ET les poids du modèle."""
-        if not (path / "config.json").exists():
-            return False
-        # Au moins un fichier de poids doit être présent
-        weight_files = [
-            "pytorch_model.bin",
-            "model.safetensors",
-            "tf_model.h5",
-            "model.ckpt.index",
-            "flax_model.msgpack",
-        ]
-        return any((path / w).exists() for w in weight_files)
+    # Français : Whisper. Mesuré sur cette machine (CPU, phrase de 6 s) :
+    #   openai/whisper-small           971 Mo — 1,3 s  ← défaut
+    #   openai/whisper-large-v3-turbo  1,6 Go — plus précis en audio bruité,
+    #                                  mais l'encodeur traite toujours 30 s de
+    #                                  signal : compter plusieurs secondes sans GPU.
+    # Basculer = une variable dans .env, aucun changement de code.
+    STT_FR_MODEL = os.getenv("STT_FR_MODEL", "openai/whisper-small")
 
-    @staticmethod
-    def _resolve_stt_path() -> str:
-        candidates = [
-            BASE_DIR / "src" / "stt_wolof-whisper-small-lora",
-            BASE_DIR / "wolof-whisper-small-lora",
-        ]
-        for c in candidates:
-            if (c / "config.json").exists():
-                return str(c)
-        return "M9and2M/whisper-small-wolof"  # téléchargement Hub
+    # Langue utilisée quand la requête n'en précise pas (la borne l'envoie
+    # toujours, selon le bouton pressé).
+    STT_LANGUAGE = os.getenv("STT_LANGUAGE", "wo") or "wo"
 
-    STT_MODEL_PATH = os.getenv(
-        "STT_MODEL_PATH",
-        str(BASE_DIR / "src" / "stt_wolof-whisper-small-lora")
-        if (BASE_DIR / "src" / "stt_wolof-whisper-small-lora" / "config.json").exists()
-        and any((BASE_DIR / "src" / "stt_wolof-whisper-small-lora" / w).exists()
-                for w in ["pytorch_model.bin", "model.safetensors"])
-        else str(BASE_DIR / "wolof-whisper-small-lora")
-        if (BASE_DIR / "wolof-whisper-small-lora" / "config.json").exists()
-        and any((BASE_DIR / "wolof-whisper-small-lora" / w).exists()
-                for w in ["pytorch_model.bin", "model.safetensors"])
-        else "M9and2M/whisper-small-wolof"
-    )
-    STT_LANGUAGE = os.getenv("STT_LANGUAGE", "")
+    # Précharger aussi le moteur français au démarrage (voir WARMUP_STT)
+    STT_WARMUP_FR = _env_bool("STT_WARMUP_FR", False)
+
+    # ── Mémoire conversationnelle ─────────────────────────────────────────
+    # Tableau [{role, content}] par session. Réinitialisé dès qu'il atteint
+    # MEMORY_MAX_MESSAGES entrées (10 = cinq échanges).
+    MEMORY_ENABLED      = _env_bool("MEMORY_ENABLED", True)
+    MEMORY_MAX_MESSAGES = int(os.getenv("MEMORY_MAX_MESSAGES", "10"))
+    MEMORY_TTL_MINUTES  = int(os.getenv("MEMORY_TTL_MINUTES", "120"))
 
     # ── Embeddings / Vectorstore ──────────────────────────────────────────
     EMBED_MODEL = os.getenv(
@@ -133,6 +134,17 @@ class Settings:
     # ── Serveur ───────────────────────────────────────────────────────────
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "8000"))
+
+    # HTTPS (optionnel). Les navigateurs ne donnent accès au micro que dans un
+    # contexte sécurisé : en HTTP l'enregistrement ne marche que sur localhost
+    # (et Safari le refuse même là). Renseigner ces deux chemins sert donc à
+    # utiliser le micro depuis un téléphone ou une autre machine du réseau.
+    SSL_CERTFILE = os.getenv("SSL_CERTFILE", "")
+    SSL_KEYFILE  = os.getenv("SSL_KEYFILE", "")
+
+    @property
+    def ssl_enabled(self) -> bool:
+        return bool(self.SSL_CERTFILE and self.SSL_KEYFILE)
 
     # ── Warm-up au démarrage ──────────────────────────────────────────────
     # Précharge les modèles au lancement de l'app pour éviter la latence de

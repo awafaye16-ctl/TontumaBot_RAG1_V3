@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TontumaBot — Borne (version 2D)</title>
+  <link rel="stylesheet" href="/static/borne.css">
+  <style>
+    /* Habillage 2D : châssis dessiné en CSS (repli léger de la borne 3D). */
+    html, body { height: 100%; }
+
+    body {
+      background:
+        radial-gradient(900px 520px at 50% -8%, rgba(91, 140, 255, 0.16), transparent 62%),
+        radial-gradient(700px 460px at 50% 112%, rgba(46, 230, 166, 0.10), transparent 60%),
+        var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      padding: 18px; overflow: hidden;
+    }
+
+    .borne {
+      width: 100%; max-width: 880px;
+      height: calc(100vh - 36px); max-height: 1000px;
+      display: flex; flex-direction: column;
+      background: linear-gradient(180deg, #171b26, #0d1018);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 38px; padding: 18px;
+      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.65),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.14),
+                  inset 0 -2px 0 rgba(0, 0, 0, 0.5);
+    }
+
+    .topbar { display: flex; align-items: center; gap: 12px; padding: 4px 10px 14px; flex-shrink: 0; }
+
+    .logo {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--green), var(--accent) 92%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 800; color: #fff;
+      box-shadow: 0 8px 24px rgba(91, 140, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    .brand b { font-size: 16px; font-weight: 750; display: block; }
+    .brand span { font-size: 11px; color: var(--muted); }
+
+    .leds { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+    .led { display: flex; align-items: center; gap: 7px; font-size: 10px;
+           text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 600; }
+    .led i { width: 9px; height: 9px; border-radius: 50%; background: #2b3242;
+             box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7); transition: .25s; }
+    .led.on   { color: var(--green); }
+    .led.on i { background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .led.busy { color: var(--amber); }
+    .led.busy i { background: var(--amber); box-shadow: 0 0 12px var(--amber); animation: blink 1s infinite; }
+    .led.rec  { color: var(--danger); }
+    .led.rec i { background: var(--danger); box-shadow: 0 0 12px var(--danger); animation: blink .7s infinite; }
+    @keyframes blink { 50% { opacity: .25; } }
+
+    /* dalle */
+    .screen {
+      flex: 1; min-height: 0;
+      border: 2px solid #000; border-radius: 22px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+                  inset 0 20px 60px rgba(0, 0, 0, 0.75),
+                  0 0 40px rgba(91, 140, 255, 0.08);
+    }
+
+    /* panneau des boutons physiques */
+    .panel {
+      flex-shrink: 0; margin-top: 18px; padding: 20px 10px 8px;
+      display: flex; align-items: flex-start; justify-content: center; gap: 34px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .slot { display: flex; flex-direction: column; align-items: center; gap: 11px; }
+
+    .pbtn {
+      position: relative; width: 118px; height: 118px; border-radius: 50%;
+      border: none; cursor: pointer; font-family: inherit;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      background: linear-gradient(180deg, #39414f, #232a36); color: #97a1bb;
+      box-shadow: 0 9px 0 #12161f, 0 16px 28px rgba(0, 0, 0, 0.6),
+                  inset 0 2px 0 rgba(255, 255, 255, 0.16), inset 0 -4px 8px rgba(0, 0, 0, 0.5);
+      transition: transform .08s, box-shadow .08s, background .25s, color .25s;
+    }
+
+    .pbtn .ico { font-size: 32px; line-height: 1; }
+    .pbtn .lbl { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+
+    .pbtn::before {
+      content: ""; position: absolute; inset: -7px; border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.06); transition: .3s;
+    }
+
+    .pbtn:active, .pbtn.press {
+      transform: translateY(7px);
+      box-shadow: 0 2px 0 #12161f, 0 6px 12px rgba(0, 0, 0, 0.5), inset 0 2px 10px rgba(0, 0, 0, 0.6);
+    }
+
+    .pbtn.wo.on { background: linear-gradient(180deg, #3ef0b4, #10b981); color: #04231a; }
+    .pbtn.wo.on::before { border-color: rgba(46, 230, 166, 0.55); box-shadow: 0 0 22px rgba(46, 230, 166, 0.5); }
+
+    .pbtn.fr.on { background: linear-gradient(180deg, #7fb0ff, #3d6ede); color: #04122e; }
+    .pbtn.fr.on::before { border-color: rgba(91, 140, 255, 0.55); box-shadow: 0 0 22px rgba(91, 140, 255, 0.5); }
+
+    /* langue en cours d'enregistrement */
+    .pbtn.rec { background: linear-gradient(180deg, #ff7b93, #e03356) !important; color: #2b0410 !important; }
+    .pbtn.rec::before { border-color: rgba(255, 92, 122, 0.6); box-shadow: 0 0 26px rgba(255, 92, 122, 0.55); }
+
+    .pbtn.power { background: linear-gradient(180deg, #4d5768, #2b323f); color: #cfd7ea; }
+    .pbtn.power.armed { background: linear-gradient(180deg, #b9c6de, #7d8ca6); color: #10161f; }
+    .pbtn.power.armed::before { border-color: rgba(185, 198, 222, 0.5); box-shadow: 0 0 22px rgba(185, 198, 222, 0.35); }
+    .pbtn.power.stop { background: linear-gradient(180deg, #ff7b93, #e03356); color: #2b0410; }
+    .pbtn.power.stop::before { border-color: rgba(255, 92, 122, 0.6); box-shadow: 0 0 26px rgba(255, 92, 122, 0.55); }
+
+    .caption { text-align: center; }
+    .caption b { display: block; font-size: 12px; font-weight: 700; }
+    .caption span { font-size: 10.5px; color: var(--muted); }
+
+    .grille {
+      flex-shrink: 0; height: 12px; margin: 6px auto 0; width: 190px; border-radius: 6px;
+      background: repeating-linear-gradient(90deg, #0b0e15 0 3px, transparent 3px 7px); opacity: .7;
+    }
+
+    .hint { flex-shrink: 0; text-align: center; font-size: 10.5px; color: #5c6685; padding-top: 6px; }
+    .hint kbd { background: rgba(255, 255, 255, 0.07); border: 1px solid var(--border);
+                border-radius: 5px; padding: 1px 5px; font-size: 10px; font-family: inherit; }
+    .hint a { color: #6f7a9c; }
+
+    @media (max-height: 780px) {
+      .pbtn { width: 92px; height: 92px; }
+      .pbtn .ico { font-size: 25px; }
+      .panel { gap: 24px; margin-top: 12px; padding-top: 14px; }
+      .msg { font-size: 16px; }
+      .key { height: 36px; font-size: 14px; }
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 8px; }
+      .borne { border-radius: 26px; padding: 12px; height: calc(100vh - 16px); }
+      .panel { gap: 16px; }
+      .pbtn { width: 88px; height: 88px; }
+      .msg { max-width: 95%; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="borne">
+
+    <div class="topbar">
+      <div class="logo">T</div>
+      <div class="brand">
+        <b>TontumaBot — Borne</b>
+        <span>Assistant administratif · Wolof · Français</span>
+      </div>
+      <div class="leds">
+        <span class="led" id="led-power"><i></i>Marche</span>
+        <span class="led" id="led-voice"><i></i><span id="voice-label">Micro</span></span>
+        <span class="led" id="led-net"><i></i><span id="net-label">Service</span></span>
+      </div>
+    </div>
+
+    <!-- ═══ Dalle ═══ -->
+    <div class="screen off" id="screen">
+
+      <div class="standby" id="standby">
+        <div class="pulse">🏛️</div>
+        <div class="big">Borne en veille</div>
+        <div class="sub">Appuyez sur <b>🇸🇳 WOLOF</b> ou <b>🇫🇷 FRANÇAIS</b> pour poser votre question
+          à la voix — ou sur <b>MARCHE</b> pour utiliser le clavier.<br>
+          <small>Session de 10 questions · extinction après 10 min d’inactivité</small></div>
+        <div class="arrow-hint">Les trois boutons ci-dessous</div>
+      </div>
+
+      <div class="session" id="session">
+        <div class="convo" id="convo"></div>
+
+        <div class="statusbar">
+          <div class="status-txt" id="status">Prêt</div>
+          <div class="counter mem" id="mem" title="Mémoire conversationnelle">🧠 0 / 10</div>
+        <div class="counter" id="counter">💬 0 / 10</div>
+          <div class="rec-time" id="rec-time">0:00</div>
+          <div class="viz" id="viz"></div>
+        </div>
+
+        <div class="keyboard" id="keyboard">
+          <textarea class="kb-input" id="kb-input" rows="1"
+                    placeholder="Écrivez votre question en wolof ou en français…"></textarea>
+          <div class="kb-row" data-keys="a z e r t y u i o p"></div>
+          <div class="kb-row" data-keys="q s d f g h j k l m"></div>
+          <div class="kb-row" data-keys="w x c v b n é è à ç"></div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <!-- ═══ Boutons physiques ═══ -->
+    <div class="panel">
+      <div class="slot">
+        <button class="pbtn wo" id="btn-wo">
+          <span class="ico">🇸🇳</span>
+          <span class="lbl" id="wo-lbl">Wolof</span>
+        </button>
+        <div class="caption"><b>Parler wolof</b><span id="wo-state">Appuyer pour parler</span></div>
+      </div>
+
+      <div class="slot">
+        <button class="pbtn fr" id="btn-fr">
+          <span class="ico">🇫🇷</span>
+          <span class="lbl" id="fr-lbl">Français</span>
+        </button>
+        <div class="caption"><b>Parler français</b><span id="fr-state">Appuyer pour parler</span></div>
+      </div>
+
+      <div class="slot">
+        <button class="pbtn power" id="btn-power">
+          <span class="ico" id="power-ico">⏻</span>
+          <span class="lbl" id="power-lbl">Marche</span>
+        </button>
+        <div class="caption"><b id="power-cap">Marche / Arrêt</b><span id="power-state">Borne éteinte</span></div>
+      </div>
+    </div>
+
+    <div class="grille"></div>
+
+    <div class="hint">
+      <kbd>1</kbd> wolof · <kbd>2</kbd> français · <kbd>3</kbd>/<kbd>Espace</kbd> marche-arrêt (maintenir 1,5 s = extinction) ·
+      session de 10 questions / veille à 10 min · <a href="/borne">version 3D</a> · <a href="/">interface classique</a>
+    </div>
+  </div>
+
+  <script src="/static/borne.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const btnWo = $('btn-wo'), btnFr = $('btn-fr'), btnPower = $('btn-power');
+    const BY_ID = { wo: btnWo, fr: btnFr, power: btnPower };
+
+    Borne.init({
+      // Le châssis CSS reflète l'état renvoyé par la logique commune.
+      onRender(i) {
+        $('led-power').className = 'led' + (i.on ? ' on' : '');
+        $('led-voice').className = 'led' + (i.rec ? ' rec' : '');
+        $('voice-label').textContent = i.rec ? 'Écoute ' + (i.micLang === 'fr' ? 'FR' : 'WO') : 'Micro';
+
+        [['wo', btnWo], ['fr', btnFr]].forEach(([code, btn]) => {
+          const rec = i.rec && i.micLang === code;
+          btn.classList.toggle('on', i.on && !i.rec);
+          btn.classList.toggle('rec', rec);
+          $(code + '-lbl').textContent   = rec ? 'Envoyer' : (code === 'wo' ? 'Wolof' : 'Français');
+          $(code + '-state').textContent =
+            rec     ? 'Enregistrement… appuyez pour envoyer' :
+            i.busy  ? 'Réponse en cours' :
+            !i.on   ? 'Allume la borne et écoute' : 'Appuyer pour parler';
+        });
+
+        const stop = i.rec || i.busy;
+        btnPower.classList.toggle('armed', i.on && !stop);
+        btnPower.classList.toggle('stop', stop);
+        $('power-ico').textContent   = !i.on ? '⏻' : (stop ? '⏹' : '⌨️');
+        $('power-lbl').textContent   = !i.on ? 'Marche' : (stop ? 'Stop' : 'Envoyer');
+        $('power-cap').textContent   = !i.on ? 'Marche / Arrêt' : (stop ? 'Arrêter' : 'Envoyer la saisie');
+        $('power-state').textContent =
+          !i.on   ? 'Borne éteinte' :
+          i.rec   ? 'Enregistrement en cours' :
+          i.busy  ? 'Traitement en cours' : 'Clavier tactile actif';
+      },
+
+      onKey(which, down) {
+        const b = BY_ID[which];
+        if (b) b.classList.toggle('press', down);
+      },
+
+      onHealth(d) {
+        $('led-net').className = 'led' + (d ? ' on' : '');
+        $('net-label').textContent = d
+          ? 'Service ' + (d.llm_ready ? String(d.llm_provider).toUpperCase() : 'dégradé')
+          : 'Hors ligne';
+      },
+    });
+
+    // Boutons de langue : appuyer pour parler, ré-appuyer pour envoyer.
+    btnWo.addEventListener('click', () => Borne.pressLang('wo'));
+    btnFr.addEventListener('click', () => Borne.pressLang('fr'));
+
+    // Bouton marche/arrêt : appui court = start/stop, appui long = extinction.
+    btnPower.addEventListener('pointerdown', e => { e.preventDefault(); btnPower.classList.add('press'); Borne.holdStart(); });
+    btnPower.addEventListener('pointerup',     () => { btnPower.classList.remove('press'); Borne.holdEnd(true); });
+    btnPower.addEventListener('pointerleave',  () => { btnPower.classList.remove('press'); Borne.holdEnd(false); });
+    btnPower.addEventListener('pointercancel', () => { btnPower.classList.remove('press'); Borne.holdEnd(false); });
+  </script>
+</body>
+
+</html>

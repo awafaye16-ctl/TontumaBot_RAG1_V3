@@ -16,12 +16,16 @@ from config import settings
 SYSTEM_PROMPT = (
     "Tu es TontumaBot, l'assistant administratif officiel du Sénégal. "
     "Réponds en français, de manière concise et directe. "
-    "Utilise en priorité les passages fournis dans le contexte. "
+    "Utilise en priorité les passages fournis dans le contexte de façon reformulée. "
     "Si les passages contiennent une information partiellement liée, utilise-la pour formuler une réponse utile. "
     "Si et seulement si le contexte ne contient AUCUNE information pertinente sur la question, "
     "réponds : 'Je n'ai pas trouvé cette information dans ma base documentaire.' "
     "Ne jamais inventer de chiffres, adresses ou délais non présents dans les passages. "
     "Ne jamais inclure de balises <think> ou de raisonnement interne dans ta réponse."
+    "Les réponses doivent etre comme si elles étaient écrites par un humain, avec des phrases complètes et un style naturel."
+    "L'historique de conversation ne sert qu'à comprendre la question courante "
+    "(pronoms, sous-entendus, questions de suite) : il n'est jamais une source d'information. "
+    "Toute donnée factuelle doit venir des passages du contexte."
 )
 
 SYSTEM_PROMPT_PLAIN = (
@@ -29,13 +33,35 @@ SYSTEM_PROMPT_PLAIN = (
     "Réponds en français, de manière concise et directe. "
     "N'utilise AUCUN formatage markdown (pas de **, pas de #, pas de listes à puces *). "
     "Écris en prose simple avec des phrases complètes et des numéros (1. 2. 3.) si besoin. "
-    "Utilise en priorité les passages fournis dans le contexte. "
+    "Utilise en priorité les passages fournis dans le contexte de façon reformulée. "
     "Si les passages contiennent une information partiellement liée, utilise-la pour formuler une réponse utile. "
     "Si et seulement si le contexte ne contient AUCUNE information pertinente sur la question, "
     "réponds : 'Je n'ai pas trouvé cette information dans ma base documentaire.' "
     "Ne jamais inventer de chiffres, adresses ou délais non présents dans les passages. "
     "Ne jamais inclure de balises <think> ou de raisonnement interne dans ta réponse."
+    "Les réponses doivent etre comme si elles étaient écrites par un humain, avec des phrases complètes et un style naturel."
+    "L'historique de conversation ne sert qu'à comprendre la question courante "
+    "(pronoms, sous-entendus, questions de suite) : il n'est jamais une source d'information. "
+    "Toute donnée factuelle doit venir des passages du contexte."
 )
+
+def _clean_history(history) -> list[dict]:
+    """Ne garde que des entrées {role, content} exploitables, en français."""
+    propre = []
+    for m in history or []:
+        role    = (m.get("role") or "").strip()
+        content = (m.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            propre.append({"role": role, "content": content})
+    return propre
+
+
+def _history_transcript(history) -> str:
+    """Rend l'historique en texte, pour les providers sans API de messages."""
+    lignes = [("Usager : " if m["role"] == "user" else "Assistant : ") + m["content"]
+              for m in _clean_history(history)]
+    return "\n".join(lignes)
+
 
 # ── État modèle local ─────────────────────────────────────────────────────
 _local_model     = None
@@ -45,14 +71,18 @@ _local_ready     = False
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _groq_generate(question_fr: str, context_fr: str, plain: bool = False) -> str:
+def _groq_generate(question_fr: str, context_fr: str, plain: bool = False,
+                   history=None) -> str:
     from groq import Groq
     client = Groq(api_key=settings.GROQ_API_KEY)
     prompt = SYSTEM_PROMPT_PLAIN if plain else SYSTEM_PROMPT
+    # L'historique passe comme de vrais tours de dialogue, entre la consigne
+    # système et la question courante : c'est la forme que le modèle attend.
     completion = client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=[
             {"role": "system", "content": prompt},
+            *_clean_history(history),
             {"role": "user",   "content": f"Contexte :\n{context_fr}\n\nQuestion : {question_fr}"},
         ],
         temperature=0.2,
@@ -62,12 +92,15 @@ def _groq_generate(question_fr: str, context_fr: str, plain: bool = False) -> st
     return _strip_think(raw)
 
 
-def _gemini_generate(question_fr: str, context_fr: str, plain: bool = False) -> str:
+def _gemini_generate(question_fr: str, context_fr: str, plain: bool = False,
+                     history=None) -> str:
     import google.generativeai as genai
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model  = genai.GenerativeModel(settings.GEMINI_MODEL)
     prompt = SYSTEM_PROMPT_PLAIN if plain else SYSTEM_PROMPT
-    full   = f"{prompt}\n\nContexte :\n{context_fr}\n\nQuestion : {question_fr}"
+    passe  = _history_transcript(history)
+    bloc   = f"Conversation précédente :\n{passe}\n\n" if passe else ""
+    full   = f"{prompt}\n\n{bloc}Contexte :\n{context_fr}\n\nQuestion : {question_fr}"
     return model.generate_content(full).text
 
 
@@ -104,11 +137,16 @@ def _load_local_model():
     print("[LLM] Modèle local prêt.")
 
 
-def _local_generate(question_fr: str, context_fr: str, plain: bool = False) -> str:
+def _local_generate(question_fr: str, context_fr: str, plain: bool = False,
+                    history=None) -> str:
     import torch
     _load_local_model()
-    prompt   = (SYSTEM_PROMPT_PLAIN if plain else SYSTEM_PROMPT) + f"\n\nContexte :\n{context_fr}\n\nQuestion : {question_fr}"
-    messages = [{"role": "user", "content": prompt}]
+    consigne = SYSTEM_PROMPT_PLAIN if plain else SYSTEM_PROMPT
+    messages = [
+        {"role": "system", "content": consigne},
+        *_clean_history(history),
+        {"role": "user",   "content": f"Contexte :\n{context_fr}\n\nQuestion : {question_fr}"},
+    ]
     inputs   = _local_tokenizer.apply_chat_template(
         messages, return_tensors="pt", add_generation_prompt=True
     ).to(_local_model.device)
@@ -143,22 +181,25 @@ def _fallback(question_fr: str, context_fr: str) -> str:
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate(question_fr: str, context_fr: str, provider: str = "groq", plain: bool = False) -> str:
+def generate(question_fr: str, context_fr: str, provider: str = "groq",
+             plain: bool = False, history=None) -> str:
     """Génère la réponse FR à partir du contexte.
 
     provider : 'groq' | 'gemini' | 'local' | autre → fallback
     plain    : True → prose sans markdown (pour traduction NLLB vers wolof)
+    history  : tours précédents [{role, content}] en français, pour résoudre
+               les questions de suite. Sans effet sur les faits cités.
     """
     if provider == "gemini":
         if settings.GEMINI_API_KEY:
-            return _gemini_generate(question_fr, context_fr, plain=plain)
+            return _gemini_generate(question_fr, context_fr, plain=plain, history=history)
         return _fallback(question_fr, context_fr)
 
     if provider == "local":
-        return _local_generate(question_fr, context_fr, plain=plain)
+        return _local_generate(question_fr, context_fr, plain=plain, history=history)
 
     # Groq (défaut)
     if settings.GROQ_API_KEY:
-        return _groq_generate(question_fr, context_fr, plain=plain)
+        return _groq_generate(question_fr, context_fr, plain=plain, history=history)
 
     return _fallback(question_fr, context_fr)

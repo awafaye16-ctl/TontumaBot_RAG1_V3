@@ -1,0 +1,267 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TontumaBot — styles de l'écran de la borne
+   Partagés par les deux habillages : borne.html (3D) et borne-simple.html.
+   Le châssis (boîtier, boutons) est propre à chaque habillage.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #05070f;
+  --screen-bg: #070b15;
+  --text: #eaf0ff;
+  --muted: #8b96b8;
+  --green: #2ee6a6;
+  --accent: #5b8cff;
+  --amber: #ffbe3d;
+  --danger: #ff5c7a;
+  --border: rgba(255, 255, 255, 0.10);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  user-select: none;
+}
+
+/* ═══ Écran ═══ */
+.screen {
+  position: relative;
+  overflow: hidden;
+  background: var(--screen-bg);
+  transition: filter .45s;
+}
+
+/* reflet de la vitre */
+.screen::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.05) 0%, transparent 44%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.screen.off { filter: brightness(.55) saturate(.6); }
+
+/* ── Veille ── */
+.standby {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px; text-align: center; padding: 28px;
+  transition: opacity .4s;
+}
+
+.standby .big { font-size: 34px; font-weight: 800; letter-spacing: -0.6px; }
+.standby .sub { font-size: 17px; color: var(--muted); max-width: 460px; line-height: 1.5; }
+.standby .sub small { font-size: 14px; opacity: .8; }
+
+.pulse {
+  width: 104px; height: 104px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--green), var(--accent));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 46px;
+  animation: breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(46, 230, 166, 0.35); }
+  50%      { transform: scale(1.05); box-shadow: 0 0 0 28px rgba(46, 230, 166, 0); }
+}
+
+.arrow-hint {
+  font-size: 15px; color: var(--green); font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.arrow-hint::after { content: "↓"; font-size: 20px; animation: bob 1.4s infinite; }
+@keyframes bob { 50% { transform: translateY(6px); } }
+
+/* ── Session ── */
+.session {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  opacity: 0; pointer-events: none; transition: opacity .4s;
+}
+.session.show   { opacity: 1; pointer-events: auto; }
+.standby.hide   { opacity: 0; pointer-events: none; }
+
+.convo {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px;
+  display: flex; flex-direction: column; gap: 14px;
+  /* Pas de `scroll-behavior: smooth` : le rendu CSS3D réécrit la transformation
+     du conteneur à chaque image, ce qui interrompt l'animation de défilement et
+     laisse la dernière réponse hors champ. */
+}
+.convo::-webkit-scrollbar { width: 7px; }
+.convo::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.msg {
+  max-width: 90%;
+  padding: 14px 18px;
+  border-radius: 16px;
+  font-size: 18px;
+  line-height: 1.5;
+  animation: pop .25s ease;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } }
+
+.msg.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, rgba(91, 140, 255, 0.24), rgba(124, 108, 255, 0.16));
+  border: 1px solid rgba(91, 140, 255, 0.34);
+  border-bottom-right-radius: 5px;
+}
+
+.msg.bot {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 5px;
+}
+.msg.bot.err { border-color: rgba(255, 92, 122, 0.4); color: #ffb3c1; }
+
+.tag {
+  display: block;
+  width: fit-content;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  font-weight: 700; color: var(--green);
+  margin-bottom: 6px;
+}
+
+.msg .fr { font-size: 15px; color: var(--muted); font-style: italic; margin-bottom: 8px; }
+.msg small { font-size: 14px; }
+
+/* Repli quand le navigateur refuse la lecture automatique */
+.play-btn {
+  display: block;
+  margin: 12px auto 2px;
+  padding: 10px 20px;
+  font-family: inherit; font-size: 15px; font-weight: 700;
+  color: #04231a;
+  background: linear-gradient(180deg, #3ef0b4, #10b981);
+  border: none; border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(46, 230, 166, 0.35);
+}
+.play-btn:active { transform: translateY(1px); }
+
+.msg img.qr {
+  display: block; margin: 12px auto 0;
+  max-width: 150px; background: #fff; padding: 8px; border-radius: 10px;
+}
+
+/* ── Barre d'état ── */
+.statusbar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 12px 20px;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 64px;
+}
+
+.status-txt { font-size: 15px; font-weight: 600; color: var(--muted); flex: 1; }
+.status-txt b { color: var(--text); }
+
+.rec-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 16px; font-weight: 700; color: var(--danger);
+  display: none;
+}
+.rec-time.show { display: block; }
+
+.counter {
+  display: none;
+  align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.counter.show { display: flex; }
+.counter.mem  { color: #9db4ff; border-color: rgba(91, 140, 255, 0.28); }
+.counter.warn { color: var(--amber);  border-color: rgba(255, 190, 61, 0.35); }
+.counter.full { color: var(--danger); border-color: rgba(255, 92, 122, 0.40); }
+
+.viz { display: flex; align-items: center; gap: 3px; height: 30px; }
+.viz i {
+  width: 4px; height: 4px; border-radius: 2px;
+  background: var(--green);
+  transition: height .07s linear;
+}
+
+/* Ligne système dans le fil (réinitialisation de la mémoire) */
+.sysmsg {
+  align-self: center;
+  font-size: 13px; color: var(--muted);
+  padding: 6px 14px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--border);
+  animation: pop .25s ease;
+}
+
+/* ── Clavier tactile ── */
+.keyboard {
+  flex-shrink: 0;
+  display: none;
+  flex-direction: column; gap: 7px;
+  padding: 12px 14px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid var(--border);
+}
+.keyboard.show { display: flex; }
+
+.kb-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  font-size: 18px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+}
+.kb-input:focus { border-color: rgba(91, 140, 255, 0.5); }
+.kb-input::placeholder { color: #5c6685; }
+
+.kb-row { display: flex; gap: 6px; justify-content: center; }
+
+.key {
+  flex: 1; min-width: 0;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #262c3a, #191e29);
+  color: var(--text);
+  font-size: 16px; font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+  transition: .06s;
+}
+.key:active { transform: translateY(2px); box-shadow: none; background: #303747; }
+.key.wide  { flex: 2.4; }
+.key.space { flex: 6; }
+.key.go    { flex: 2.4; background: linear-gradient(180deg, #2ee6a6, #10b981); color: #04231a; }
+
+/* ── Toast (dans l'écran) ── */
+.toast {
+  position: absolute; left: 50%; bottom: 82px;
+  transform: translate(-50%, 18px);
+  background: #10151f; color: var(--text);
+  border: 1px solid var(--border);
+  padding: 12px 18px; border-radius: 12px;
+  font-size: 14px; font-weight: 500;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.7);
+  opacity: 0; pointer-events: none; transition: .28s;
+  z-index: 20; max-width: 88%; text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }

@@ -9,7 +9,7 @@ Assistant administratif multilingue (Wolof / Français) avec RAG, STT, TTS et AP
 │                           TontumaBot V3 (FastAPI)                           │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
 │  │   STT    │→ │  Detect  │→ │Translate │→ │  Intent  │→ │   RAG    │     │
-│  │ (Whisper)│  │  Langue  │  │ WO → FR  │  │  Router  │  │ (Hybrid  │     │
+│  │ wo:HuBERT│  │  Langue  │  │ WO → FR  │  │  Router  │  │ (Hybrid  │     │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │  + MMR   │     │
 │                                                           │  + Rerank)    │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  └──────────┘     │
@@ -31,7 +31,7 @@ Assistant administratif multilingue (Wolof / Français) avec RAG, STT, TTS et AP
 | Vector DB | ChromaDB (persistant) |
 | Retrieval | Hybrid BM25 + Vectoriel → MMR → Cross-encoder reranker (index + embeddings cachés) |
 | Traduction| NLLB-200-distilled-600M (WO↔FR) |
-| STT       | Whisper-small-wolof (M9and2M / LoRA local) |
+| STT       | wo : Wolof-HuBERT-CTC · fr : Whisper       |
 | TTS       | **Oolel-Voices** (voice cloning, soynade-research/Oolel-Voices) |
 | Frontend  | HTML/JS vanilla (REST + SSE) |
 
@@ -54,6 +54,37 @@ python app.py
 > optionnellement STT/TTS) sont préchargés au lancement (~20-30 s) pour éviter
 > la latence de chargement sur la première requête. Désactivable via
 > `WARMUP_ON_START=false` (voir `.env`).
+
+## Docker
+
+```bash
+# 1. Configuration
+cp .env.example .env        # puis renseigner GROQ_API_KEY (ou GEMINI_API_KEY)
+
+# 2. Construction de l'image
+docker compose build
+
+# 3. Téléchargement des poids (~4 Go, une seule fois — stockés dans des volumes)
+docker compose run --rm download-models
+
+# 4. Lancement
+docker compose up -d
+docker compose logs -f api    # suivre le warm-up
+# → http://localhost:8008/borne
+```
+
+Les poids ne sont pas embarqués dans l'image : ils vivent dans des volumes
+nommés (`hf-cache`, `stt-wolof`, `nllb-wo-fr`, `nllb-fr-wo`), tout comme la base
+ChromaDB (`chroma`) et les fichiers reçus (`uploads`). Reconstruire l'image ne
+les efface donc pas.
+
+| Point d'attention | Détail |
+|---|---|
+| Image CPU uniquement | `torch` est installé depuis l'index CPU de PyTorch (~200 Mo au lieu de ~2,5 Go). Pour un GPU, retirer `--index-url .../cpu` du `Dockerfile` et lancer avec `--gpus all`. |
+| `bitsandbytes` | Installé en best-effort : une absence de wheel pour l'architecture cible n'échoue pas la construction. Il ne sert qu'à `LLM_PROVIDER=local`. |
+| Warm-up | Le premier démarrage charge tous les modèles : plusieurs minutes sur CPU. Le *healthcheck* laisse 5 minutes (`start_period`). |
+| HTTPS | Si `SSL_CERTFILE`/`SSL_KEYFILE` sont renseignés dans `.env`, placer les certificats dans `./certs` (monté en lecture seule) et adapter le *healthcheck* en `https://`. |
+| Audio | `ffmpeg` et `libsndfile1` sont installés dans l'image pour décoder le `webm/opus` envoyé par la borne. |
 
 ## Endpoints REST
 
@@ -223,7 +254,8 @@ NLLB_WO_FR_MODEL=bilalfaye/nllb-200-distilled-600M-wo-fr-en
 NLLB_NUM_BEAMS=2       # 2 = qualité, 1 = greedy (plus rapide)
 
 # STT
-STT_MODEL_PATH=./src/stt_wolof-whisper-small-lora
+STT_WO_MODEL=./src/stt_wolof-hubert-ctc
+STT_FR_MODEL=openai/whisper-small
 
 # Embeddings
 EMBED_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
@@ -258,7 +290,8 @@ PORT=8008
 | LLM (local) | Qwen2.5-7B-Instruct (4bit) | HuggingFace |
 | Embeddings | paraphrase-multilingual-MiniLM-L12-v2 | SBERT |
 | Traduction WO↔FR | NLLB-200-distilled-600M | bilalfaye (HF) |
-| STT Wolof | Whisper-small-wolof | M9and2M / LoRA local |
+| STT Wolof | Wolof-HuBERT-CTC | soynade-research (local ou Hub) |
+| STT Français | Whisper (small par défaut) | openai (cache HF) |
 | TTS (principal) | **Oolel-Voices** | soynade-research (HF) |
 | Reranker | ms-marco-MiniLM-L-6-v2 | cross-encoder |
 
@@ -281,7 +314,7 @@ TontumaBot_RAG1_V3/
 │   ├── pipeline.py            # Pipeline RAG complet (+ callback SSE)
 │   ├── vectorstore.py         # ChromaDB + BM25/embeddings cachés + MMR
 │   ├── ingestion.py           # Indexation documents (TXT/MD/PDF)
-│   ├── input/stt.py           # STT Whisper wolof
+│   ├── input/stt.py           # STT bilingue (HuBERT wolof / Whisper français)
 │   ├── language/detector.py   # Détection de langue
 │   ├── translation/nllb.py    # Traduction WO↔FR (NLLB)
 │   ├── intent/router.py       # Router d'intention
