@@ -12,6 +12,24 @@
 #
 #  HF_CACHE_DIR (.env) pointe sur le cache HuggingFace à partager avec l'hôte.
 #  setup.sh le règle sur ~/.cache/huggingface pour éviter tout retéléchargement.
+#
+#  SUR MAC APPLE SILICON — à lire avant de déployer une borne :
+#
+#  Un conteneur n'a pas accès à Metal. Docker Desktop fait tourner une machine
+#  virtuelle Linux, où MPS n'existe pas : tout passe sur CPU, y compris la
+#  synthèse vocale. Mesuré sur la même machine et le même texte, la synthèse
+#  passe d'un facteur 2,0 à 5,7-6,8 fois la durée de l'audio produit — une
+#  réponse parlée de quinze secondes demande 90 à 105 s au lieu de 30 s.
+#
+#  Pour une borne en service sur un Mac, lancer l'application en natif
+#  (`python app.py` dans le venv) : c'est le seul moyen d'utiliser le GPU.
+#  Ce conteneur sert à livrer le projet sur un serveur Linux, et à disposer
+#  d'un environnement reproductible pour les tests.
+#
+#  Prévoir enfin la mémoire de la VM : les modèles pèsent 6,5 Go mesurés, et
+#  Docker Desktop n'alloue par défaut qu'une fraction de la RAM de l'hôte.
+#  En dessous de 10 Go, le conteneur est tué sans message explicite
+#  (Réglages → Resources → Memory).
 # ─────────────────────────────────────────────────────────────────────────────
 services:
   api:
@@ -38,14 +56,28 @@ services:
       - ./data/chroma:/app/data/chroma
       # Audios reçus de la borne et documents administrés
       - uploads:/app/uploads
+      # Audios TTS produits par la borne. Sans ce montage, ils s'écrivent dans
+      # la couche du conteneur : ils grossissent sans limite et disparaissent au
+      # premier `--force-recreate`. Depuis le découpage de la synthèse, une
+      # réponse produit N+1 fichiers (les morceaux diffusés, plus l'assemblage)
+      # de ~500 Ko chacun — l'accumulation est rapide et rien ne la purge.
+      # Le dossier porte aussi borne.html/borne.js/index.html : on monte donc
+      # celui de l'hôte, comme pour ./src/stt_wolof-hubert-ctc, plutôt qu'un
+      # volume nommé qui masquerait ces fichiers.
+      - ./static:/app/static
       # Certificats HTTPS optionnels (SSL_CERTFILE / SSL_KEYFILE dans .env)
       - ./certs:/app/certs:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8008/health"]
       interval: 30s
       timeout: 10s
-      # Le warm-up charge tous les modèles : compter plusieurs minutes sur CPU
-      start_period: 300s
+      # Le warm-up charge tous les modèles PUIS fait une synthèse à vide pour
+      # compiler les noyaux de calcul. Mesuré sur CPU : 30 s pour charger le
+      # TTS et 58 s pour le préchauffer, sans compter NLLB, l'embedder, le
+      # reranker et le STT. Trop court, le conteneur est déclaré malade avant
+      # d'avoir fini de démarrer, et `restart: unless-stopped` le relance en
+      # boucle sans jamais le laisser aboutir.
+      start_period: 600s
       retries: 3
 
   # Service à la demande : télécharge les poids dans les volumes, puis sort.

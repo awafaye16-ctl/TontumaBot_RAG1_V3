@@ -1,8 +1,10 @@
 # ── Environnements virtuels (jamais dans l'image) ────────────────────────────
-# venv/
+# Ces lignes étaient commentées : `COPY . .` embarquait donc 1,6 Go de venv
+# compilé pour macOS dans une image Linux, où il est inutilisable.
+venv/
 venv311/
-# env/
-# .venv/
+env/
+.venv/
 
 # ── Git / IDE / système ──────────────────────────────────────────────────────
 .git/

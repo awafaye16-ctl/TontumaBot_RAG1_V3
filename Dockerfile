@@ -43,8 +43,22 @@ WORKDIR /app
 COPY requirements.txt .
 
 # torch/torchaudio depuis l'index CPU : ~200 Mo au lieu de ~2,5 Go avec CUDA.
+#
+# Sauf sur ARM. Vérifié sur l'index CPU de PyTorch : torch y monte jusqu'à
+# 2.9.1 en aarch64, mais torchaudio s'y arrête à 2.0.2 — la résolution échoue
+# donc sur un Mac Apple Silicon, où l'image se construit en linux/arm64. PyPI,
+# lui, publie bien torchaudio 2.11 en manylinux aarch64, et sur cette
+# architecture les roues PyPI sont de toute façon sans CUDA : on y va
+# directement, sans surcoût de taille.
+#
+# TARGETARCH est fourni par BuildKit ('arm64' ou 'amd64').
+ARG TARGETARCH
 RUN pip install --upgrade pip \
- && pip install --index-url https://download.pytorch.org/whl/cpu torch torchaudio
+ && if [ "$TARGETARCH" = "arm64" ]; then \
+        pip install torch torchaudio ; \
+    else \
+        pip install --index-url https://download.pytorch.org/whl/cpu torch torchaudio ; \
+    fi
 
 # bitsandbytes ne sert qu'au LLM local quantifié (LLM_PROVIDER=local) et n'a
 # pas de wheel sur toutes les architectures. Installé à part, en best-effort,
@@ -64,7 +78,13 @@ USER tontuma
 
 EXPOSE 8008
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+# start-period généreux : le démarrage charge tous les modèles PUIS fait une
+# synthèse à vide pour compiler les noyaux de calcul. Mesuré sur CPU — le seul
+# mode disponible en conteneur — le chargement du TTS prend 30 s et son
+# préchauffage 58 s, auxquels s'ajoutent NLLB, l'embedder, le reranker et le
+# STT. Un délai trop court ferait déclarer le conteneur malade avant qu'il ait
+# fini de démarrer, et `restart: unless-stopped` le relancerait en boucle.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
     CMD curl -fsS http://localhost:${PORT:-8008}/health || exit 1
 
 # app.py lit .env, applique HOST/PORT et le HTTPS optionnel (SSL_CERTFILE)
