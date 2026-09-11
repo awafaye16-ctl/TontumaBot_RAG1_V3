@@ -318,6 +318,19 @@
       animation-delay: .4s;
     }
 
+    /* Avis de réinitialisation de la mémoire : ni une question, ni une réponse
+       — une note de service, centrée et discrète. */
+    .sysmsg {
+      align-self: center;
+      margin: 10px auto;
+      padding: 6px 14px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 999px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+    }
+
     /* Progression du pipeline, dans la bulle de traitement : elle naît et
        disparaît avec elle, sans rien déplacer dans la page. */
     .progress {
@@ -623,6 +636,7 @@
       <span class="badge" id="badge-lang">Détecteur actif</span>
       <span class="badge on" id="badge-v2">V3 — Reranker</span>
       <span class="badge on" id="badge-sse">REST + SSE</span>
+      <span class="badge" id="badge-mem" title="Mémoire conversationnelle de la session">🧠 0 / 10</span>
     </div>
     </header>
 
@@ -818,11 +832,37 @@
       ).join('') + '</div>';
     }
 
+    // ---- mémoire conversationnelle ----
+    //  Le serveur garde l'historique de la session (`session_id` ci-dessus) et
+    //  le vide au bout de MEMORY_MAX_MESSAGES. Sans retour à l'écran, cette
+    //  remise à zéro est invisible : les questions de suite cessent d'un coup
+    //  d'être comprises — « et combien ça coûte ? » perd son sujet — sans que
+    //  rien n'explique pourquoi. Le compteur et l'avis le rendent lisible.
+    let memMax = 10;
+
+    function majMemoire(mem) {
+      if (!mem) return;
+      if (mem.max) memMax = mem.max;
+      const badge = $('badge-mem');
+      if (badge) {
+        badge.textContent = '🧠 ' + (mem.count || 0) + ' / ' + memMax;
+        badge.classList.toggle('on', (mem.count || 0) > 0);
+      }
+      if (mem.reset) {
+        const d = document.createElement('div');
+        d.className = 'sysmsg';
+        d.textContent = '🧠 Mémoire de conversation réinitialisée (' + memMax + ' messages atteints)';
+        chat.appendChild(d);
+        chat.scrollTop = chat.scrollHeight;
+      }
+    }
+
     function renderAnswer(data) {
       if (!data || typeof data !== 'object') {
         addMsg('bot', '❌ Réponse invalide du serveur');
         return;
       }
+      majMemoire(data.memory);
       const t = data.trace || {};
       const isWo = t.input_lang === 'wo';
       const langTag = '<span class="lang-tag">' + (isWo ? 'Réponse en wolof 🇸🇳' : 'Réponse en français') + '</span>';

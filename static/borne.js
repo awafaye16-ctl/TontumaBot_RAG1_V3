@@ -800,7 +800,16 @@ window.Borne = (function () {
       const d = document.createElement('div');
       d.className = 'sysmsg';
       d.innerHTML = '🧠 Mémoire de conversation réinitialisée (' + memMax + ' messages atteints)';
-      convo.appendChild(d);
+      // L'avis se place AVANT la réponse. Sur le chemin vocal, la bulle existe
+      // déjà quand cet avis arrive : le texte est affiché dès l'annonce de la
+      // synthèse, bien avant le résultat complet qui porte l'état mémoire. Un
+      // simple append le rejetterait sous la réponse, où il se lirait comme un
+      // commentaire de celle-ci plutôt que comme une coupure dans le fil.
+      if (bulleReponse && bulleReponse.parentNode === convo) {
+        convo.insertBefore(d, bulleReponse);
+      } else {
+        convo.appendChild(d);
+      }
       scrollBas();
     }
     renderCounter();

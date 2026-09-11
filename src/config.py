@@ -96,7 +96,9 @@ class Settings:
     GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
     GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
     LLM_PROVIDER    = os.getenv("LLM_PROVIDER", "groq")
-    # Modèle Groq : openai/gpt-oss-120b (non-reasoning, rapide, pas de <think>)
+    # Modèle Groq : openai/gpt-oss-120b (rapide, pas de balises <think> dans la
+    # réponse). Il raisonne néanmoins avant de répondre, dans un canal séparé :
+    # cette trace est comptée dans LLM_MAX_TOKENS — cf. le commentaire là-bas.
     GROQ_MODEL      = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
     # Modèle local (utilisé si LLM_PROVIDER == "local")
