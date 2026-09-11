@@ -9,8 +9,10 @@ build/
 .eggs/
 
 # ── Données sensibles ─────────────────────────────────────────────────────────
-# Ne pas commiter le .env avec les clés API
+# Ne pas commiter les clés API
 .env
+api.key
+*.key
 env/
 .venv/
 

@@ -1,0 +1,22 @@
+[
+  {"id": 1,  "question": "Naka la mën a jëme ci ospitaal bi ngir gis doktoor?"},
+  {"id": 2,  "question": "Lan laa war a def bu ma bëggee def rendez-vous ci ospitaal?"},
+  {"id": 3,  "question": "Naka laa mën a gis service urgences bi?"},
+  {"id": 4,  "question": "Ana ban service laa war a dem bu ma amee feebar bu metti?"},
+  {"id": 5,  "question": "Lan mooy ay procédure ngir def examen ci ospitaal?"},
+  {"id": 6,  "question": "Naka laa mën a jëfandikoo assurance maladie ci ospitaal?"},
+  {"id": 7,  "question": "Ana laa war a dem ngir def prise de sang?"},
+  {"id": 8,  "question": "Naka laa mën a gis service pédiatrie bi?"},
+  {"id": 9,  "question": "Bu ma bëggee gis gynécologue, ana service laa war a dem?"},
+  {"id": 10, "question": "Lan laa war a indi bu ma bëggee dem ci ospitaal ngir consultation?"},
+  {"id": 11, "question": "Naka laa mën a xam fan la service cardiologie nekk?"},
+  {"id": 12, "question": "Ana laa war a dem ngir def radiographie?"},
+  {"id": 13, "question": "Naka laa mën a jëme ci service maternité bi?"},
+  {"id": 14, "question": "Lan laa war a def bu ma bëggee dugal sama bopp ci ospitaal?"},
+  {"id": 15, "question": "Naka laa mën a xam ay waxtu yu consultation yi?"},
+  {"id": 16, "question": "Ana service laa war a dem bu ma bëggee def scanner?"},
+  {"id": 17, "question": "Naka laa mën a jëme ci service pharmacie bi ci ospitaal?"},
+  {"id": 18, "question": "Lan laa war a def ngir sàkku dossier médical?"},
+  {"id": 19, "question": "Naka laa mën a xam fan laa war a dem bu ma amee rendez-vous ci ospitaal?"},
+  {"id": 20, "question": "Su ma amee xaalis bu néew, lan mooy ay possibilité yi ngir jot ci soins ci ospitaal?"}
+]

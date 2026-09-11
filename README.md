@@ -7,17 +7,17 @@ Assistant administratif multilingue (Wolof / Français) avec RAG, STT, TTS et AP
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           TontumaBot V3 (FastAPI)                           │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
-│  │   STT    │→ │  Detect  │→ │Translate │→ │  Intent  │→ │   RAG    │     │
-│  │ wo:HuBERT│  │  Langue  │  │ WO → FR  │  │  Router  │  │ (Hybrid  │     │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │  + MMR   │     │
-│                                                           │  + Rerank)    │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  └──────────┘     │
-│  │   TTS    │← │Translate │← │   LLM    │← │ Context  │                    │
-│  │Oolel-Voices│  │ FR → WO │  │ (Groq/   │  │ + Prompt │                    │
-│  └──────────┘  └──────────┘  │  Gemini/ │  └──────────┘                    │
-│                              │  Local)  │                                  │
-│                              └──────────┘                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │   STT    │→ │  Detect  │→ │Translate │→ │  Intent  │→ │   RAG    │       │
+│  │ wo:HuBERT│  │  Langue  │  │ WO → FR  │  │  Router  │  │ (Hybrid  │       │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │  + MMR   │       │
+│                                                          │  + Rerank)       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  └──────────┘       │
+│  │   TTS    │← │Translate │← │   LLM    │← │ Context  │                     │
+│  │Oolel-Voices│ │ FR → WO │  │ (Groq/   │  │ + Prompt │                     │
+│  └──────────┘  └──────────┘  │  Gemini/ │  └──────────┘                     │
+│                              │  Local)  │                                   │
+│                              └──────────┘                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -146,8 +146,24 @@ data: {"step": "detect", "lang": "fr"}
 ```
 
 Étapes possibles : `start` → (`stt`) → `detect` → (`translate_in`) → `intent` →
-`retrieval` → `llm` → (`translate_out`) → (`tts`) → puis `result` → `done`.
+`retrieval` → `llm` → (`translate_out`) → (`alerte_nombres`) → (`tts`) → puis
+`result` → `done`.
 Les étapes entre parenthèses n'apparaissent que si pertinentes (audio, entrée wolof, TTS).
+
+`alerte_nombres` n'est émis que si un nombre du français ne se retrouve pas dans
+la traduction wolof. NLLB réécrit parfois les montants de lui-même et se trompe
+(`1000 francs CFA` → `junniy dërëm`, soit 5000 F) ; la valeur d'origine étant
+alors perdue, le pipeline ne corrige pas mais signale :
+
+```
+event: status
+data: {"step": "alerte_nombres", "controles": 2,
+       "suspects": [{"valeur": 1000, "montant": true}], "ajoutes": [],
+       "coherent": false}
+```
+
+Le même bilan est repris dans `trace.french_to_wolof.nombres` de l'événement
+`result`, que l'alerte ait été levée ou non.
 
 **Résultat final** (`event: result`) :
 ```
@@ -264,6 +280,8 @@ EMBED_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 OOLEL_TTS_REPO=soynade-research/Oolel-Voices
 TTS_SPEED=1.0          # 1.0 = normal, >1 ralentit
 TTS_N_STEPS=10         # 10 = qualité max, 4 = rapide (~2.5x)
+TTS_CHUNK_CHARS=200    # longueur d'un morceau de synthèse ; 0 = pas de découpage
+TTS_CHUNK_PAUSE_MS=120 # silence inséré entre deux morceaux
 
 # Reranker
 RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
@@ -273,6 +291,8 @@ RERANKER_TOP_K=3
 WARMUP_ON_START=true
 WARMUP_STT=true        # false pour ne pas précharger le STT (chargé au 1er audio)
 WARMUP_TTS=true        # false pour ne pas précharger le TTS (chargé au 1er TTS)
+                       # true déclenche aussi une synthèse à vide (~60 s sur M1) :
+                       # la 1re synthèse d'un processus coûte ~1,5x les suivantes
 
 # Serveur
 HOST=0.0.0.0

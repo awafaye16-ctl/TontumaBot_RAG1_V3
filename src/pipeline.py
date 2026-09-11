@@ -42,6 +42,8 @@ from typing import Callable, Optional
 import vectorstore
 from language.detector import detect_language
 from translation.nllb import wolof_to_french, french_to_wolof
+from translation.nombres import en_chiffres, realigner, verifier_nombres
+from translation.prononciation import pour_synthese
 from intent.router import detect_intent
 from retrieval.reranker import rerank
 from generation.llm import generate
@@ -381,24 +383,83 @@ def answer(
         t0 = time.perf_counter()
         # Nettoyer le markdown avant traduction (NLLB ne gère pas les balises)
         response_fr_clean = _strip_markdown(response_fr)
+        # Puis passer les nombres en chiffres : mesuré, NLLB rend « cinq mille
+        # francs » par « junni » (mille) alors que « 5000 francs » traverse
+        # intact. Le prompt le demande déjà au LLM, ceci rattrape les oublis.
+        response_fr_clean = en_chiffres(response_fr_clean)
         response_wo, _ = french_to_wolof(response_fr_clean)
+
+        # NLLB altère les nombres : mesuré sur 20 questions réelles, 8 réponses
+        # en portaient un faux — dont « composez le 3333 » rendu par « 333 »,
+        # le numéro d'urgence de l'hôpital. Le français fait autorité et les
+        # nombres y sont dans le même ordre : on les réinjecte position par
+        # position, mais seulement si les deux textes en portent autant. Sinon
+        # l'alignement n'a pas de sens et l'on ne touche à rien.
+        response_wo, recal = realigner(response_fr_clean, response_wo)
+
         response["response_wo"] = response_wo
         response["response"]    = response_wo
+
+        # NLLB réécrit parfois les montants de lui-même, et se trompe : mesuré,
+        # « 1000 francs CFA » ressort en « junniy dërëm » (= 5000 F). Quand le
+        # modèle fabrique un montant, la valeur d'origine a disparu et rien ne
+        # peut la réparer en aval. On ne corrige donc pas : on signale.
+        controle = verifier_nombres(response_fr_clean, response_wo)
         trace["french_to_wolof"] = {
-            "model":      "bilalfaye/nllb-200-distilled-600M-wo-fr-en",
-            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            "model":       "bilalfaye/nllb-200-distilled-600M-wo-fr-en",
+            "latency_ms":  round((time.perf_counter() - t0) * 1000, 1),
+            "nombres":     controle,
+            "realignement": recal,
         }
+        if recal["corriges"]:
+            print(f"[nombres] réinjectés depuis le français : {recal['corriges']}")
+        if not controle["coherent"]:
+            _emit("alerte_nombres", **controle)
+            print(f"[nombres] écart FR/WO — suspects={controle['suspects']} "
+                  f"ajoutés={controle['ajoutes']}\n"
+                  f"          fr: {response_fr_clean[:120]}\n"
+                  f"          wo: {response_wo[:120]}")
 
     # ── 7. TTS (optionnel) ────────────────────────────────────────────────
     if tts:
-        _emit("tts")
+        # La réponse part avec l'annonce de la synthèse : `result` n'arrive
+        # qu'une fois l'audio produit, et la borne se mettrait sinon à parler
+        # une minute avant d'afficher ce qu'elle dit.
+        _emit("tts",
+              response    = response.get("response", ""),
+              response_fr = response.get("response_fr", ""),
+              response_wo = response.get("response_wo"),
+              lang        = lang)
         from tts_Ooleil.tts import synthesize, source as tts_source
         t0           = time.perf_counter()
         text_for_tts = response.get("response_wo", response_fr)
-        synthesize(text_for_tts, tts_out)
+        # Oolel-Voices ne lit correctement que du wolof en toutes lettres :
+        # chiffres, horaires, pourcentages et sigles se dégradent, et certains
+        # (« APIX », « 8:00 ») détruisent l'énoncé entier. Le texte est donc
+        # préparé pour la synthèse — l'affichage, lui, garde ses chiffres.
+        bilan_tts = {}
+        if lang == "wo":
+            text_for_tts, bilan_tts = pour_synthese(text_for_tts)
+
+        # La synthèse est le poste le plus lent du pipeline : sur une réponse
+        # longue, 123 s pour 61 s d'audio. Chaque morceau est donc annoncé dès
+        # qu'il est prêt (le premier à 23 s), pour que le client commence à
+        # lire au lieu d'attendre l'énoncé complet.
+        morceaux = []
+
+        def _sur_morceau(index: int, total: int, chemin: str) -> None:
+            morceaux.append(chemin)
+            _emit("tts_chunk", index=index, total=total, audio=chemin,
+                  latency_ms=round((time.perf_counter() - t0) * 1000, 1))
+
+        synthesize(text_for_tts, tts_out, on_chunk=_sur_morceau)
         response["audio"] = tts_out
+        response["audio_chunks"] = morceaux
         trace["tts"] = {
             "engine":     tts_source(),
+            "texte_synthetise": text_for_tts,
+            "n_morceaux": len(morceaux),
+            **bilan_tts,
             "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
         }
 

@@ -38,8 +38,12 @@ def get_embedder() -> "SentenceTransformer":
     global _embedder
     if _embedder is None:
         from sentence_transformers import SentenceTransformer  # import lazy
-        print(f"[VS] Chargement embedder ({EMBED_MODEL})...")
-        _embedder = SentenceTransformer(EMBED_MODEL)
+        import device as _dev
+        dev = _dev.resolve("embedder")
+        print(f"[VS] Chargement embedder ({EMBED_MODEL}) sur {dev.upper()}...")
+        # Sans `device`, sentence-transformers refait sa propre détection : on
+        # lui impose celle du pipeline pour que tout partage le même backend.
+        _embedder = SentenceTransformer(EMBED_MODEL, device=dev)
     return _embedder
 
 

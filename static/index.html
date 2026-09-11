@@ -318,6 +318,36 @@
       animation-delay: .4s;
     }
 
+    /* Progression du pipeline, dans la bulle de traitement : elle naît et
+       disparaît avec elle, sans rien déplacer dans la page. */
+    .progress {
+      margin-top: 8px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .progress > i {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+    }
+
+    /* Pendant la synthèse vocale, la jauge passe au vert : le texte est déjà
+       connu, ce qui reste à attendre est l'audio. */
+    .progress.tts > i {
+      background: linear-gradient(90deg, var(--green), var(--accent2));
+    }
+
+    .step-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
     @keyframes blink {
 
       0%,
@@ -676,11 +706,88 @@
       const div = document.createElement('div');
       div.className = 'msg bot';
       div.id = 'typing';
-      div.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>';
+      // Structure fixe : seuls le texte du libellé et la largeur de la jauge
+      // changent ensuite. Réécrire la bulle à chaque étape remettrait la barre
+      // à zéro à chacune d'elles.
+      div.innerHTML = '<div class="avatar">🤖</div><div class="bubble">' +
+        '<div class="typing"><span></span><span></span><span></span></div>' +
+        '<div class="step-label" id="typing-label">⏳ Démarrage…</div>' +
+        '<div class="progress" id="typing-progress"><i></i></div></div>';
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
+      progresRAZ();
     }
-    function removeTyping() { const t = $('typing'); if (t) t.remove(); }
+    function removeTyping() {
+      progresArret();
+      const t = $('typing');
+      if (t) t.remove();
+    }
+
+    // ---- progression du pipeline ----
+    //  Chaque étape porte un jalon : la place estimée de sa fin sur la jauge.
+    //  Les poids ne sont pas uniformes — quand le TTS est demandé, la synthèse
+    //  pèse à elle seule plus que toute la chaîne RAG (48 s contre 11 s sur une
+    //  réponse type), et des parts égales donneraient une jauge qui bondit à
+    //  90 % puis paraît figée.
+    //
+    //  L'aiguille ne saute pas d'un jalon au suivant : elle s'en approche par
+    //  fractions, vite puis de plus en plus lentement. Une étape de vingt
+    //  secondes garde ainsi une barre qui avance, sans jamais dépasser le
+    //  jalon annoncé par le serveur.
+    const JALONS = {
+      start: 3, stt: 10, detect: 14, translate_in: 20, intent: 24,
+      retrieval: 32, llm: 44, translate_out: 56, tts: 62,
+    };
+    const JALON_TTS = 62, JALON_FIN_TTS = 97;
+    let progresCible = 0, progresAffiche = 0, progresTimer = null;
+    let progresFacteur = 1, avecTTS = false;
+
+    function progresRAZ() {
+      progresCible = progresAffiche = 0;
+      progresFacteur = 1;
+      avecTTS = false;
+      clearInterval(progresTimer);
+      progresTimer = setInterval(() => {
+        const barre = document.querySelector('#typing-progress > i');
+        if (!barre) return;
+        const ecart = progresCible - progresAffiche;
+        if (Math.abs(ecart) < 0.05) return;
+        progresAffiche += ecart * 0.07;
+        barre.style.width = progresAffiche.toFixed(2) + '%';
+      }, 80);
+    }
+
+    function progresArret() { clearInterval(progresTimer); progresTimer = null; }
+
+    function progresVers(pct) {
+      progresCible = Math.max(progresCible, pct);   // une jauge ne recule pas
+    }
+
+    // La course s'arrête à un jalon différent selon le travail demandé : la
+    // synthèse (qui pousse ensuite la jauge morceau par morceau), la traduction
+    // de sortie pour une question wolof sans TTS, ou la rédaction pour une
+    // question française. Les jalons sont mis à l'échelle de cette fin-là,
+    // sinon la réponse arrive sur une barre aux deux tiers.
+    function progresEchelle(synthese, langue) {
+      if (synthese) return 1;                      // 62 → 97 tenu par les morceaux
+      const dernier = langue === 'fr' ? JALONS.llm : JALONS.translate_out;
+      return 95 / dernier;
+    }
+
+    function progresEtape(step, data) {
+      if (step === 'start')  { avecTTS = !!(data && data.tts); progresFacteur = progresEchelle(avecTTS, null); }
+      if (step === 'detect') progresFacteur = Math.max(progresFacteur, progresEchelle(avecTTS, data && data.lang));
+      if (step === 'tts' || step === 'tts_chunk') {
+        const jauge = $('typing-progress');
+        if (jauge) jauge.classList.add('tts');
+      }
+      if (step === 'tts_chunk') {
+        const part = data && data.total ? data.index / data.total : 0;
+        progresVers(JALON_TTS + (JALON_FIN_TTS - JALON_TTS) * part);
+        return;
+      }
+      if (JALONS[step] !== undefined) progresVers(JALONS[step] * progresFacteur);
+    }
 
     // ---- pipeline trace dans la réponse ----
     function buildTrace(t) {
@@ -756,14 +863,21 @@
       llm:           '🤖 Génération de la réponse…',
       translate_out: '🔄 Traduction FR→WO…',
       tts:           '🔊 Synthèse vocale…',
+      tts_chunk:     '🔊 Synthèse vocale…',
     };
 
-    function updateTyping(step) {
-      const b = document.querySelector('#typing .bubble');
-      if (!b) return;
-      const label = STEP_LABELS[step] || esc(step);
-      b.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-top:6px;">' + label + '</div>';
+    // Cette page lit la réponse d'un seul tenant (<audio controls> sur
+    // `audio_url`) : les morceaux diffusés ne servent ici qu'à afficher
+    // l'avancement de la synthèse. La borne, elle, les enchaîne (borne.js).
+    function updateTyping(step, data) {
+      progresEtape(step, data);
+      const lab = $('typing-label');
+      if (!lab) return;
+      let label = STEP_LABELS[step] || esc(step);
+      if (step === 'tts_chunk' && data && data.total > 1) {
+        label = '🔊 Synthèse vocale… (' + data.index + '/' + data.total + ')';
+      }
+      lab.innerHTML = label;
     }
 
     // Consomme un flux SSE (event: <nom>\ndata: <json>\n\n) et route les événements.
@@ -811,7 +925,7 @@
           body: JSON.stringify({ question: text, tts, session_id: SESSION_ID })
         });
         await consumeSSE(res, {
-          onStatus: d => updateTyping(d.step),
+          onStatus: d => updateTyping(d.step, d),
           onResult: d => { removeTyping(); renderAnswer(d); },
           onError:  m => { removeTyping(); addMsg('bot', '❌ ' + esc(m)); },
         });
@@ -833,7 +947,7 @@
       try {
         const res = await fetch(endpoint, { method: 'POST', body: fd });
         await consumeSSE(res, {
-          onStatus: d => updateTyping(d.step),
+          onStatus: d => updateTyping(d.step, d),
           onResult: d => { removeTyping(); renderAnswer(d); },
           onError:  m => { removeTyping(); addMsg('bot', '❌ ' + esc(m)); },
         });

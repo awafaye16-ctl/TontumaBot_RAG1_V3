@@ -4,7 +4,7 @@ Modèles sélectionnés après benchmark :
   - WO→FR : bilalfaye/nllb-200-distilled-600M-wo-fr-en
   - FR→WO : bilalfaye/nllb-200-distilled-600M-wo-fr-en (même modèle)
   - STT wo : soynade-research/Wolof-HuBERT-CTC (local : src/stt_wolof-hubert-ctc/)
-  - STT fr : openai/whisper-large-v3-turbo
+  - STT fr : openai/whisper-small
   - TTS    : Oolel-Voices (soynade-research/Oolel-Voices)
   - LLM    : Qwen/Qwen2.5-7B-Instruct (local 4bit) ou Groq/Gemini (API)
 """
@@ -13,9 +13,14 @@ from pathlib import Path
 
 # ── Désactiver TensorFlow/Keras avant tout import ─────────────────────────
 # sentence_transformers déclenche keras qui charge TF (~20s) même si on
-# n'utilise pas TF. Ces variables l'empêchent de se charger.
+# n'utilise pas TF. USE_TF=0 suffit à empêcher transformers de l'importer.
+#
+# On ne touche PAS à CUDA_VISIBLE_DEVICES ici : cette variable est lue par
+# PyTorch autant que par TensorFlow. La mettre à "" pour « désactiver le GPU
+# TF » rendait `torch.cuda.is_available()` faux, et faisait donc tomber NLLB,
+# le STT et le LLM local sur CPU sur toute machine à GPU — sans le moindre
+# message. Le choix du backend appartient désormais à src/device.py.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")          # pas de GPU TF
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 # Force sentence_transformers à utiliser PyTorch uniquement
 os.environ.setdefault("USE_TF", "0")
@@ -44,6 +49,29 @@ def _env_bool(key: str, default: bool) -> bool:
     return os.getenv(key, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
 
+# ── Plafond d'allocation mémoire sur Apple Metal (MPS) ────────────────────
+# Mesuré sur M1 16 Go : les modèles résidents pèsent 6,8 Go de mémoire GPU,
+# mais une seule synthèse vocale faisait monter la réservation au pilote à
+# 16,7 Go — soit toute la machine. L'écart n'est pas fait de tenseurs vivants
+# (6,5 Go seulement) mais de cache d'allocateur : le décodeur auto-régressif
+# du TTS agrandit son cache KV d'un cran à chaque pas, donc réclame une taille
+# de bloc inédite à chaque pas, et l'allocateur en conserve une par taille.
+# PyTorch l'y autorise : son plafond par défaut vaut 1,7 fois la mémoire de
+# travail recommandée par Metal. Le serveur finissait tué par le système.
+#
+# Ramené à 0,9, la réservation plafonne à 9,8 Go et reste stable d'une requête
+# à l'autre, sans coût de latence mesurable (42-47 s contre 49 s auparavant sur
+# une réponse type). Le ratio bas, qui déclenche la purge du cache, doit rester
+# sous le ratio haut — PyTorch refuse de démarrer sinon.
+#
+# 0 désactiverait le plafond : à ne poser que sur une machine à grosse VRAM.
+_MPS_RATIO = float(os.getenv("MPS_MEMORY_RATIO", "0.9"))
+if _MPS_RATIO > 0:
+    os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", f"{_MPS_RATIO:.2f}")
+    os.environ.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO",
+                          f"{max(0.1, _MPS_RATIO - 0.1):.2f}")
+
+
 # ── Résolution du checkpoint STT ─────────────────────────────────────────
 _STT_HUB_ID  = "soynade-research/Wolof-HuBERT-CTC"
 _STT_WEIGHTS = ("model.safetensors", "pytorch_model.bin")
@@ -70,7 +98,7 @@ class Settings:
     LLM_PROVIDER    = os.getenv("LLM_PROVIDER", "groq")
     # Modèle Groq : openai/gpt-oss-120b (non-reasoning, rapide, pas de <think>)
     GROQ_MODEL      = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-    GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
     # Modèle local (utilisé si LLM_PROVIDER == "local")
     LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
     LOCAL_LLM_QUANT = os.getenv("LOCAL_LLM_QUANT", "4bit")  # 4bit | 8bit | fp16
@@ -126,6 +154,34 @@ class Settings:
     TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
     # Itérations de diffusion du vocodeur : 10 = qualité originale, 4 = ~2.5x plus rapide
     TTS_N_STEPS = int(os.getenv("TTS_N_STEPS", "10"))
+    # Longueur visée d'un morceau de synthèse, en caractères. Le décodeur T3
+    # est auto-régressif : une réponse entière tient la mémoire du GPU du début
+    # à la fin, et sur une machine déjà en tension le coût s'envole. Découpée,
+    # chaque passe reste bornée. 0 désactive le découpage.
+    TTS_CHUNK_CHARS = int(os.getenv("TTS_CHUNK_CHARS", "200"))
+    # Silence inséré entre deux morceaux au recollage, en millisecondes.
+    TTS_CHUNK_PAUSE_MS = int(os.getenv("TTS_CHUNK_PAUSE_MS", "120"))
+
+    # ── Longueur de réponse ───────────────────────────────────────────────
+    # La réponse est lue à voix haute : mesuré, la synthèse coûte environ deux
+    # secondes par seconde d'audio, soit ~0,14 s par caractère. Une réponse de
+    # 900 caractères — il y en avait dans les 20 questions de référence — fait
+    # donc attendre deux minutes devant la borne. La longueur n'est pas ici une
+    # affaire de style mais de latence.
+    #
+    # Le plafond de jetons est un garde-fou contre une génération qui s'emballe,
+    # pas l'outil de mise en forme : c'est la consigne système qui règle la
+    # longueur.
+    #
+    # Il ne peut pas être serré. gpt-oss-120b est un modèle à raisonnement : il
+    # produit une trace interne — mesuré, 750 à 840 caractères, soit environ 200
+    # jetons — AVANT la réponse, et le plafond la compte. À 220 jetons, tout le
+    # budget passait dans le raisonnement et la réponse revenait vide : 7 des 20
+    # questions de référence sortaient sans un mot. 800 laisse la place au
+    # raisonnement et à une réponse de trois phrases, et ne se déclenche que sur
+    # une génération réellement anormale.
+    LLM_MAX_TOKENS  = int(os.getenv("LLM_MAX_TOKENS", "800"))
+    LLM_MAX_PHRASES = int(os.getenv("LLM_MAX_PHRASES", "3"))
 
     # ── Reranker ──────────────────────────────────────────────────────────
     RERANKER_MODEL = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")

@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import settings
+import device
 from pipeline import answer as pipeline_answer
 from seed_docs import get_documents
 import memory
@@ -41,6 +42,13 @@ import ingestion
 # =============================================================================
 
 def _warmup() -> None:
+    # Le backend est annoncé une fois pour toutes : c'est la première chose à
+    # vérifier quand la latence dérape (un repli silencieux sur CPU multiplie
+    # les temps de traduction par trois).
+    infos = device.infos()
+    print(f"[device] torch {infos['torch']} — cuda={infos['cuda']} mps={infos['mps']} "
+          f"→ auto={infos['auto']} (DEVICE={infos['override']})")
+
     def _step(name: str, fn):
         t0 = time.perf_counter()
         try:
@@ -89,8 +97,11 @@ def _warmup() -> None:
     # TTS (Oolel-Voices) — optionnel
     if settings.WARMUP_TTS:
         def _tts():
-            from tts_Ooleil.tts import _load
-            _load()
+            # Le chargement seul ne suffit pas : la première synthèse d'un
+            # processus compile les noyaux de calcul et coûte le double des
+            # suivantes. Elle est faite ici, pas devant l'usager.
+            from tts_Ooleil.tts import prechauffer
+            prechauffer()
         _step("tts", _tts)
 
 
@@ -150,12 +161,19 @@ class RagasRequest(BaseModel):
 #
 #  Événements émis (chacun : "event: <nom>\ndata: <json>\n\n") :
 #    status  { step: "start|stt|detect|translate_in|intent|retrieval|llm|translate_out|tts", ... }
+#    status  { step: "tts_chunk", index, total, audio_url }   ← un par morceau
 #    result  { response, response_fr, response_wo?, qr_code?, audio_url?, lang, trace }
 #    error   { message }
 #    done    {}
 #
 #  L'audio n'est PAS envoyé dans le flux (SSE = texte) : on renvoie une URL
 #  `audio_url` (fichier servi via /static) que le client récupère en GET.
+#
+#  La synthèse étant le poste le plus lent (jusqu'à 123 s sur une réponse
+#  longue), elle est diffusée morceau par morceau : chaque `tts_chunk` porte
+#  l'URL d'un fragment lisible immédiatement, dans l'ordre. Un client qui les
+#  enchaîne parle dès 23 s. Ceux qui les ignorent attendent `audio_url` dans
+#  `result`, qui reste la réponse entière en un seul fichier.
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -240,6 +258,14 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
                 "trace":       trace,
             })
         else:
+            # Le pipeline ne connaît que des chemins de fichiers ; le client
+            # n'a rien à faire d'un chemin absolu sur le disque du serveur.
+            if data.get("step") == "tts_chunk":
+                chemin = data.pop("audio", None)
+                data["audio_url"] = (
+                    f"/static/{os.path.basename(chemin)}"
+                    if chemin and os.path.exists(chemin) else None
+                )
             yield _sse(event, data)
 
     yield _sse("done", {})
@@ -312,6 +338,7 @@ def health():
         "stt_wo":       settings.STT_WO_MODEL,
         "stt_fr":       settings.STT_FR_MODEL,
         "reranker":     settings.RERANKER_MODEL,
+        "device":       device.infos(),
         "n_documents":  len(vectorstore.all_documents()),
         "n_chunks":     vectorstore.count(),
         "memory": {

@@ -155,12 +155,37 @@ body {
 
 /* ── Barre d'état ── */
 .statusbar {
+  position: relative;
   flex-shrink: 0;
   border-top: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.35);
   padding: 12px 20px;
   display: flex; align-items: center; gap: 12px;
   min-height: 64px;
+}
+
+/* Progression du pipeline : un trait posé sur l'arête haute de la barre
+   d'état. À hauteur d'yeux sur une borne, il se lit d'un coup d'œil sans
+   disputer la place au texte, et disparaît hors traitement — une jauge à zéro
+   en permanence ferait croire à une panne. */
+.progress {
+  position: absolute; top: -1px; left: 0; right: 0; height: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0; transition: opacity 250ms ease;
+  pointer-events: none;
+}
+.progress.show { opacity: 1; }
+
+.progress > i {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  box-shadow: 0 0 12px rgba(91, 140, 255, 0.55);
+}
+
+/* Pendant la lecture, la jauge est pleine : elle passe au vert pour dire
+   « ça parle » plutôt que « ça travaille ». */
+.progress.lecture > i {
+  background: linear-gradient(90deg, var(--green), var(--accent));
 }
 
 .status-txt { font-size: 15px; font-weight: 600; color: var(--muted); flex: 1; }

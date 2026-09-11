@@ -53,6 +53,16 @@ window.Borne = (function () {
   let unlocked  = false;   // l'élément a-t-il déjà démarré sur un geste ?
   let idleTimer = null;    // retour en veille après inactivité
 
+  // Diffusion de la synthèse : le serveur envoie la réponse par morceaux, et
+  // la borne parle dès le premier au lieu d'attendre l'énoncé complet.
+  let fileMorceaux  = [];     // morceaux reçus, pas encore lus
+  let morceauxLus   = 0;      // morceaux déjà lus jusqu'au bout
+  let morceauxTotal = 0;      // annoncé par le serveur (0 = pas de diffusion)
+  let lectureAbandonnee = false;  // STOP, extinction, ou échec de lecture
+  let lectureEchouee    = false;  // le navigateur a refusé : bouton ▶ à l'arrivée
+  let diffusionRecue    = false;  // au moins un morceau est arrivé par le flux
+  let bulleReponse  = null;   // bulle de réponse, créée dès le texte connu
+
   let hooks = { onRender: null, onKey: null, onHealth: null };
 
   let screen, standby, session, convo, statusEl, recTime, counter, keyboard, kbInput,
@@ -282,6 +292,11 @@ window.Borne = (function () {
   function stopSpeaking() {
     if (player && speaking) { try { player.pause(); } catch (_) { } }
     speaking = false;
+    // Les morceaux encore en vol ne doivent pas relancer la lecture : un STOP
+    // arrête la réponse, pas seulement la phrase en cours.
+    lectureAbandonnee = true;
+    fileMorceaux = [];
+    progresCacher();
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -575,18 +590,126 @@ window.Borne = (function () {
     llm:           '🤖 Rédaction de la réponse…',
     translate_out: '🔄 Traduction français → wolof…',
     tts:           '🔊 Synthèse vocale…',
+    tts_chunk:     '🔊 Synthèse vocale…',
   };
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  Progression du pipeline
+  //
+  //  Chaque étape porte un jalon, place estimée de sa fin sur la jauge. Les
+  //  poids ne sont pas uniformes : sur une question vocale, la synthèse pèse
+  //  à elle seule plus que tout le reste (48 s contre 11 s pour la chaîne
+  //  RAG), et un découpage en parts égales donnerait une jauge qui bondit
+  //  jusqu'à 90 % puis semble bloquée.
+  //
+  //  L'aiguille ne saute pas d'un jalon à l'autre : elle s'en approche par
+  //  fractions, vite d'abord puis de plus en plus lentement. Une étape de
+  //  vingt secondes garde ainsi une jauge qui avance — sans jamais atteindre
+  //  le jalon suivant avant que le serveur ne l'annonce, donc sans mentir.
+  // ═══════════════════════════════════════════════════════════════════
+  const JALONS = {
+    start: 3, stt: 10, stt_wo: 10, stt_fr: 10, detect: 14, translate_in: 20,
+    intent: 24, retrieval: 32, llm: 44, translate_out: 56, tts: 62,
+  };
+  const JALON_TTS = 62;        // début de la synthèse
+  const JALON_LECTURE = 96;    // dernier morceau synthétisé
+
+  let progresEl = null, progresBarEl = null;
+  let progresCible = 0, progresAffiche = 0, progresTimer = null;
+  let progresFacteur = 1, avecTTS = false;
+
+  function progresInit() {
+    const barre = document.querySelector('.statusbar');
+    if (!barre || progresEl) return;
+    progresEl = document.createElement('div');
+    progresEl.className = 'progress';
+    progresBarEl = document.createElement('i');
+    progresEl.appendChild(progresBarEl);
+    barre.appendChild(progresEl);
+  }
+
+  function progresAnimer() {
+    if (progresTimer) return;
+    progresTimer = setInterval(() => {
+      const ecart = progresCible - progresAffiche;
+      if (Math.abs(ecart) < 0.05) return;
+      progresAffiche += ecart * 0.07;
+      progresBarEl.style.width = progresAffiche.toFixed(2) + '%';
+    }, 80);
+  }
+
+  function progresRAZ() {
+    if (!progresEl) return;
+    progresCible = progresAffiche = 0;
+    progresFacteur = 1;
+    avecTTS = false;
+    progresBarEl.style.width = '0%';
+    progresEl.classList.add('show');
+    progresEl.classList.remove('lecture');
+    progresAnimer();
+  }
+
+  function progresVers(pct) {
+    if (!progresEl) return;
+    progresCible = Math.max(progresCible, pct);   // une jauge ne recule pas
+  }
+
+  function progresLecture(lus, total) {
+    if (!progresEl) return;
+    progresEl.classList.add('show', 'lecture');
+    // La lecture peut suivre un STOP (bouton ▶) : l'animation a pu être
+    // arrêtée entre-temps.
+    progresAnimer();
+    progresVers(total ? JALON_LECTURE + (100 - JALON_LECTURE) * (lus / total) : 100);
+  }
+
+  function progresCacher() {
+    if (!progresEl) return;
+    clearInterval(progresTimer);
+    progresTimer = null;
+    progresEl.classList.remove('show');
+  }
+
+  // La course s'arrête à un jalon différent selon le travail demandé : la
+  // synthèse (qui pousse ensuite la jauge morceau par morceau), la traduction
+  // de sortie pour une question wolof sans TTS, ou la rédaction pour une
+  // question française. Les jalons sont mis à l'échelle de cette fin-là, sinon
+  // la réponse arrive sur une barre aux deux tiers.
+  function progresEchelle(synthese, langue) {
+    if (synthese) return 1;                       // 62 → 96 tenu par les morceaux
+    const dernier = langue === 'fr' ? JALONS.llm : JALONS.translate_out;
+    return 95 / dernier;
+  }
+
+  function progresEtape(step, data) {
+    if (step === 'start')  { avecTTS = !!(data && data.tts); progresFacteur = progresEchelle(avecTTS, null); }
+    if (step === 'detect') progresFacteur = Math.max(progresFacteur, progresEchelle(avecTTS, data && data.lang));
+    if (step === 'tts_chunk') {
+      // La synthèse occupe la fin de la jauge, morceau par morceau.
+      const part = data && data.total ? data.index / data.total : 0;
+      progresVers(JALON_TTS + (JALON_LECTURE - JALON_TTS) * part);
+      return;
+    }
+    if (JALONS[step] !== undefined) progresVers(JALONS[step] * progresFacteur);
+  }
 
   function addThinking() {
     removeThinking();
+    bulleReponse = null;
     const d = addMsg('bot', '<span class="tag">Traitement</span><span id="think-txt">⏳ Démarrage…</span>');
     d.id = 'thinking';
+    progresRAZ();
   }
   function removeThinking() { const t = $('thinking'); if (t) t.remove(); }
 
   function updateThinking(step, data) {
     if (step === 'stt' && data && data.lang) step = 'stt_' + data.lang;
-    const label = STEP_LABELS[step] || esc(step);
+    progresEtape(step, data);
+
+    let label = STEP_LABELS[step] || esc(step);
+    if (step === 'tts_chunk' && data && data.total > 1) {
+      label = '🔊 Synthèse vocale… (' + data.index + '/' + data.total + ')';
+    }
     const t = $('think-txt');
     if (t) t.innerHTML = label;
     setStatus(label);
@@ -620,10 +743,14 @@ window.Borne = (function () {
     }
   }
 
-  function renderAnswer(data) {
-    majMemoire(data.memory);
+  // Affichage seul : appelé une première fois quand le serveur annonce la
+  // synthèse — le texte est alors connu, l'audio non — puis une seconde fois
+  // à l'arrivée du résultat complet, qui apporte le QR code. La bulle est
+  // enrichie sur place plutôt que dupliquée.
+  function afficherReponse(data) {
     const t = data.trace || {};
-    const isWo = t.input_lang === 'wo';
+    const langue = t.input_lang || data.lang;
+    const isWo = langue === 'wo';
     let html = '<span class="tag">' + (isWo ? 'Tontu ci wolof 🇸🇳' : 'Réponse') + '</span>';
     if (data.response_fr && data.response_wo) html += '<div class="fr">FR : ' + esc(data.response_fr) + '</div>';
     html += '<div>' + esc(data.response || data.response_fr || '') + '</div>';
@@ -632,12 +759,31 @@ window.Borne = (function () {
               '<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px;">' +
               '📱 Scannez pour emporter la procédure</div>';
     }
-    addMsg('bot', html);
+    if (bulleReponse) bulleReponse.innerHTML = html;
+    else bulleReponse = addMsg('bot', html);
+    scrollBas();
+  }
+
+  function renderAnswer(data) {
+    majMemoire(data.memory);
+    afficherReponse(data);
+
+    // La lecture des morceaux est déjà lancée : elle se termine d'elle-même et
+    // ramènera la borne au repos (cf. finLecture). Le critère est « un morceau
+    // est arrivé par le flux », pas « il y en a plusieurs » : une réponse
+    // courte tient en un seul morceau, et il est déjà en train d'être lu.
+    if (lastSource === 'voice' && diffusionRecue && !lectureAbandonnee) return;
+
+    // Le navigateur a refusé la lecture en cours de diffusion : le bouton
+    // propose la réponse entière, dont l'URL n'était pas connue plus tôt.
+    if (lectureEchouee && data.audio_url) { offerManualPlay(data.audio_url); return; }
 
     // Une question posée à la voix reçoit une réponse à la voix ; la session
-    // ne se termine qu'une fois la lecture achevée (cf. speak()).
-    if (lastSource === 'voice' && data.audio_url) speak(data.audio_url);
+    // ne se termine qu'une fois la lecture achevée (cf. finLecture()).
+    if (lastSource === 'voice' && data.audio_url && !lectureAbandonnee) speak(data.audio_url);
     else {
+      progresVers(100);
+      setTimeout(progresCacher, 500);
       setState(S.IDLE);
       if (maybeEndSession()) return;
       remainingStatus('🎙️ <b>WOLOF</b> / <b>FRANÇAIS</b> pour reparler · ⌨️ ou tapez');
@@ -660,16 +806,39 @@ window.Borne = (function () {
     renderCounter();
   }
 
-  function speak(url) {
-    stopSpeaking();
-    const p = getPlayer();
+  // ═══════════════════════════════════════════════════════════════════
+  //  Lecture de la réponse
+  //
+  //  La synthèse est le poste le plus lent du pipeline — jusqu'à 123 s pour
+  //  61 s d'audio sur une réponse longue. Le serveur l'envoie donc par
+  //  morceaux : le premier arrive vers 23 s et la borne le lit pendant que la
+  //  suite se fabrique.
+  //
+  //  La lecture peut rattraper la synthèse (elle produit environ deux fois
+  //  moins vite qu'on n'écoute) : la file se vide alors sans que la réponse
+  //  soit finie. On reste en état SPEAKING, silencieux, jusqu'au morceau
+  //  suivant — repasser au repos rendrait la main à l'usager en plein milieu
+  //  d'une phrase.
+  // ═══════════════════════════════════════════════════════════════════
+  function enfilerMorceau(url, total) {
+    if (!url || lectureAbandonnee) return;
+    morceauxTotal = total || morceauxTotal || 1;
+    fileMorceaux.push(url);
+    if (!speaking) lireSuivant();
+  }
 
-    p.onended = () => {
-      speaking = false;
-      setState(S.IDLE);
-      if (maybeEndSession()) return;
-      remainingStatus('🎙️ <b>WOLOF</b> / <b>FRANÇAIS</b> pour reparler · ⌨️ ou tapez');
-    };
+  function lireSuivant() {
+    if (lectureAbandonnee) return;
+    const url = fileMorceaux.shift();
+
+    if (!url) {
+      if (morceauxTotal && morceauxLus >= morceauxTotal) finLecture();
+      else speaking = false;          // en attente du morceau suivant
+      return;
+    }
+
+    const p = getPlayer();
+    p.onended = () => { morceauxLus++; lireSuivant(); };
     // Source illisible (fichier absent, format refusé) : `play()` rejette sur
     // la plupart des navigateurs, mais pas tous — d'où ce filet.
     p.onerror = () => { if (speaking) speakFailed({ name: 'NotSupportedError' }, url); };
@@ -677,18 +846,47 @@ window.Borne = (function () {
     p.src = url + '?' + Date.now();
     speaking = true;
     setState(S.SPEAKING);
-    setStatus('🔊 <b>Lecture de la réponse…</b> — <b>STOP</b> pour interrompre');
+    progresLecture(morceauxLus, morceauxTotal);
+    setStatus(morceauxTotal > 1
+      ? '🔊 <b>Lecture de la réponse…</b> (' + Math.min(morceauxLus + 1, morceauxTotal) +
+        '/' + morceauxTotal + ') — <b>STOP</b> pour interrompre'
+      : '🔊 <b>Lecture de la réponse…</b> — <b>STOP</b> pour interrompre');
 
     p.play()
       .then(() => { unlocked = true; })
       .catch(e => speakFailed(e, url));
   }
 
+  function finLecture() {
+    speaking = false;
+    progresCacher();
+    setState(S.IDLE);
+    if (maybeEndSession()) return;
+    remainingStatus('🎙️ <b>WOLOF</b> / <b>FRANÇAIS</b> pour reparler · ⌨️ ou tapez');
+  }
+
+  // Lecture d'un fichier unique (réponse non diffusée, ou bouton ▶).
+  function speak(url) {
+    stopSpeaking();
+    lectureAbandonnee = false;
+    fileMorceaux  = [];
+    morceauxLus   = 0;
+    morceauxTotal = 1;
+    enfilerMorceau(url, 1);
+  }
+
   function speakFailed(err, url) {
     speaking = false;
+    lectureAbandonnee = true;
+    fileMorceaux = [];
+    progresCacher();
     setState(S.IDLE);
     const blocked = err && err.name === 'NotAllowedError';
-    offerManualPlay(url);
+    // En diffusion, le bouton doit proposer la réponse entière et non le
+    // morceau en cours : il est posé à l'arrivée de `result`, qui porte l'URL
+    // du fichier complet.
+    if (diffusionRecue) lectureEchouee = true;
+    else offerManualPlay(url);
     if (maybeEndSession()) return;
     setStatus(blocked
       ? '🔇 Lecture bloquée par le navigateur — appuyez sur <b>▶ Écouter</b>'
@@ -713,16 +911,46 @@ window.Borne = (function () {
     scrollBas();
   }
 
+  // Traitement commun des événements de progression, quel que soit le canal
+  // (clavier ou voix) : étiquette, jauge, affichage anticipé de la réponse et
+  // mise en lecture des morceaux dès qu'ils arrivent.
+  function onStatus(d) {
+    if (d.step === 'tts' && (d.response || d.response_fr)) {
+      // Le texte est connu avant l'audio : on l'affiche maintenant, sinon la
+      // borne parlerait une minute avant de montrer ce qu'elle dit.
+      removeThinking();
+      afficherReponse(d);
+    }
+    if (d.step === 'tts_chunk' && lastSource === 'voice' && d.audio_url) {
+      diffusionRecue = true;
+      enfilerMorceau(d.audio_url, d.total);
+    }
+    updateThinking(d.step, d);
+  }
+
   function handleError(msg) {
     removeThinking();
+    progresCacher();
     addMsg('bot err', '❌ ' + esc(msg));
     if (msgCount > 0) msgCount--;          // échec : quota non consommé
     setState(S.IDLE);
     setStatus('❌ Erreur — réessayez');
   }
 
+  // Une nouvelle question repart d'une diffusion vierge : les morceaux de la
+  // précédente ne doivent jamais se glisser dans la suivante.
+  function raz_diffusion() {
+    fileMorceaux  = [];
+    morceauxLus   = 0;
+    morceauxTotal = 0;
+    lectureAbandonnee = false;
+    lectureEchouee    = false;
+    diffusionRecue    = false;
+  }
+
   async function sendText(text) {
     msgCount++;                   // une question = un message de la session
+    raz_diffusion();
     lastSource = 'text';
     addMsg('user', esc(text));
     addThinking();
@@ -737,7 +965,7 @@ window.Borne = (function () {
         signal:  abortCtl.signal,
       });
       await consumeSSE(res, {
-        onStatus: d => updateThinking(d.step, d),
+        onStatus,
         onResult: d => { removeThinking(); renderAnswer(d); },
         onError:  handleError,
       });
@@ -752,6 +980,7 @@ window.Borne = (function () {
 
   async function sendAudio(file, lang) {
     msgCount++;                   // une question = un message de la session
+    raz_diffusion();
     lastSource = 'voice';
     addThinking();
     setState(S.PROCESSING);
@@ -773,7 +1002,7 @@ window.Borne = (function () {
             if (th) convo.insertBefore(bubble, th);
             scrollBas();
           }
-          updateThinking(d.step, d);
+          onStatus(d);
         },
         onResult: d => { removeThinking(); renderAnswer(d); },
         onError:  handleError,
@@ -798,6 +1027,7 @@ window.Borne = (function () {
     counter  = $('counter');  keyboard = $('keyboard'); kbInput = $('kb-input');
     memEl    = $('mem');
     vizEl    = $('viz');      toastEl  = $('toast');
+    progresInit();            // jauge ajoutée à la barre d'état, si présente
 
     for (let i = 0; i < VIZ_BARS; i++) vizEl.appendChild(document.createElement('i'));
     buildKeyboard();

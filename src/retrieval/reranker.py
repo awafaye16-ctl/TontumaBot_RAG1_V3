@@ -12,8 +12,10 @@ def load_model():
     if _model is not None:
         return _model
     from sentence_transformers import CrossEncoder  # import lazy
-    print(f"[Reranker] Chargement ({settings.RERANKER_MODEL})...")
-    _model = CrossEncoder(settings.RERANKER_MODEL)
+    import device as _dev
+    dev = _dev.resolve("reranker")
+    print(f"[Reranker] Chargement ({settings.RERANKER_MODEL}) sur {dev.upper()}...")
+    _model = CrossEncoder(settings.RERANKER_MODEL, device=dev)
     print("[Reranker] Chargé.")
     return _model
 

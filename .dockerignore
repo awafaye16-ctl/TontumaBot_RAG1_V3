@@ -1,8 +1,8 @@
 # ── Environnements virtuels (jamais dans l'image) ────────────────────────────
-venv/
+# venv/
 venv311/
-env/
-.venv/
+# env/
+# .venv/
 
 # ── Git / IDE / système ──────────────────────────────────────────────────────
 .git/

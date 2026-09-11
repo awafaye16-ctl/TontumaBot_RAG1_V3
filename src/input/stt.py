@@ -6,8 +6,11 @@ Deux moteurs spécialisés, choisis par l'appelant (bouton de la borne) :
            HuBERT base fine-tuné en CTC (95M params, WER 0,357). Décodage en
            une passe, ~1,4 s pour 25 s d'audio sur CPU.
 
-  français STT_FR_MODEL, par défaut openai/whisper-large-v3-turbo
-           Whisper encodeur-décodeur, langue forcée à `fr`.
+  français STT_FR_MODEL, par défaut openai/whisper-small
+           Whisper encodeur-décodeur, langue forcée à `fr`. Les variantes
+           « turbo » et distillées n'allègent que le décodeur : l'encodeur
+           reste celui de large-v3 et traite toujours 30 s de signal, donc
+           elles sont plus lentes que `small` sur des énoncés courts.
 
 Pourquoi deux modèles plutôt qu'un Whisper multilingue : le wolof ne fait pas
 partie des langues de Whisper — un modèle généraliste y produit du charabia,
@@ -39,14 +42,18 @@ _engines: dict[str, object] = {}
 _sources: dict[str, str]    = {}
 
 
-def _device_index() -> int:
-    """0 si CUDA est disponible, -1 (CPU) sinon.
+def _device():
+    """Backend du STT, résolu par src/device.py (surcharge : STT_DEVICE).
 
-    On ne bascule pas sur MPS : les convolutions de l'extracteur de features y
-    restent capricieuses, et le CPU suffit pour ces tailles de modèle.
+    L'ancienne version renvoyait -1 (CPU) dès que CUDA manquait, ce qui excluait
+    MPS par principe — le commentaire invoquait des convolutions capricieuses
+    dans l'extracteur de features, vrai sur les premières versions du backend
+    Metal. Le support s'est stabilisé depuis ; le choix est donc laissé à la
+    détection, et `STT_DEVICE=cpu` reste là pour revenir en arrière sans
+    toucher au code si un checkpoint particulier pose problème.
     """
-    import torch
-    return 0 if torch.cuda.is_available() else -1
+    import device as _dev
+    return _dev.pipeline_device("stt")
 
 
 def _is_hubert_ctc(path: str) -> bool:
@@ -96,7 +103,7 @@ def _build_wolof():
         feature_extractor = processor.feature_extractor,
         chunk_length_s    = _CHUNK_S,
         stride_length_s   = _STRIDE_S,
-        device            = _device_index(),
+        device            = _device(),
     )
 
 
@@ -116,7 +123,7 @@ def _build_francais():
         task           = "automatic-speech-recognition",
         model          = src,
         chunk_length_s = 30,
-        device         = _device_index(),
+        device         = _device(),
     )
 
     # Les checkpoints Whisper embarquent des `forced_decoder_ids` hérités ; ils

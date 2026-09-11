@@ -422,7 +422,7 @@ except Exception as e:
     print(f"⚠️  Reranker non chargé ({e}) — les chunks filtrés seront utilisés tels quels, sans réordonnancement fin.")
 
 
-def reranker_chunks(question, candidats_ids, top_k=3):
+def reranker_chunks(question, candidats_ids, top_k=5):
     if not candidats_ids:
         return []
     if not RERANKER_OK:
@@ -436,7 +436,7 @@ def reranker_chunks(question, candidats_ids, top_k=3):
     return [candidats_ids[i] for i in ordre[:top_k]], [float(scores[i]) for i in ordre[:top_k]]
 
 
-ids_reranked, scores_reranked = reranker_chunks(question_test, ids_filtres, top_k=3)
+ids_reranked, scores_reranked = reranker_chunks(question_test, ids_filtres, top_k=5)
 print(f"\nTop-{len(ids_reranked)} chunks après reranking :")
 for cid, score in zip(ids_reranked, scores_reranked):
     print(f"  {cid} (score={score:.2f})")
@@ -446,7 +446,7 @@ for cid, score in zip(ids_reranked, scores_reranked):
 Assemble toutes les étapes précédentes en une seule fonction réutilisable.
 """
 
-def recuperer_chunks(question, top_k_hybride=10, top_k_mmr=5, top_k_final=3, seuil_filtre=SEUIL_SCORE_MIN):
+def recuperer_chunks(question, top_k_hybride=10, top_k_mmr=5, top_k_final=5, seuil_filtre=SEUIL_SCORE_MIN):
     t0 = time.perf_counter()
     resultats_fusionnes = recherche_hybride(question, top_k=top_k_hybride)
     t_hybride = time.perf_counter() - t0
@@ -517,7 +517,7 @@ def generer_reponse(prompt, max_new_tokens=200):
     return conversation[0]["generated_text"][-1]["content"].strip()
 
 
-def repondre(question, top_k_final=3):
+def repondre(question, top_k_final=5):
     resultat_retrieval = recuperer_chunks(question, top_k_final=top_k_final)
     contexte = "\n\n".join(resultat_retrieval["textes"])
     prompt = construire_prompt(contexte, question)
