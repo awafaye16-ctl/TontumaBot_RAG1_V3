@@ -232,6 +232,7 @@ dossier vide.
 | Chemin | Taille | Conséquence si absent |
 |--------|--------|------------------------|
 | `data/chroma/` | 2,2 Mo | **la borne démarre, `/health` dit `ok`, et elle ne sait répondre à rien** |
+| `8_1_c.wav` | 3,3 Mo | *corrigé* — était attrapé par `*.wav` dans `.gitignore`. Sans lui, la borne parle avec la voix par défaut du modèle, pas celle du projet |
 | `src/stt_wolof-hubert-ctc/` | 361 Mo | le STT wolof retombe sur l'identifiant Hub et se retéléchargera |
 | `uploads/*.pdf` | 2 fichiers | les sources qui permettraient de réindexer |
 

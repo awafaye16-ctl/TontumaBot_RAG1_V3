@@ -35,6 +35,11 @@ src/Fr-Wo_Lahadnllb200-francais-wolof/
 
 # ── Fichiers audio générés ────────────────────────────────────────────────────
 *.wav
+# Exception : la voix de référence du clonage vocal n'est pas un fichier généré,
+# c'est un actif du projet. Sans elle, le TTS retombe sur la voix par défaut du
+# checkpoint — la borne parle, mais avec une autre voix que la vôtre, et rien ne
+# le signale. (.dockerignore porte déjà la même exception.)
+!8_1_c.wav
 *.mp3
 *.aac
 *.m4a

@@ -238,6 +238,17 @@ else
     echo "     ou déposez les documents via /admin puis relancez l'ingestion."
 fi
 
+# ── 8bis. Voix de référence ──────────────────────────────────────────────────
+#  Même piège que le corpus : sans ce fichier la borne démarre, /health répond
+#  « ok », et elle parle — mais avec la voix par défaut du modèle au lieu de
+#  celle du projet. Rien ne le signale à l'écran, seule l'oreille le détecte.
+if [ -f 8_1_c.wav ]; then
+    ok "Voix de référence présente (clonage vocal)"
+else
+    warn "8_1_c.wav absent : la synthèse utilisera la voix par défaut du modèle,"
+    echo "     pas celle du projet. Copiez-le depuis une machine qui l'a."
+fi
+
 # ── 9. Démarrage ─────────────────────────────────────────────────────────────
 PORT=$(lire_env PORT); PORT=${PORT:-8008}
 

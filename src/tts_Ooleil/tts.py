@@ -141,7 +141,13 @@ def _load() -> bool:
                 break
 
         if _prompt is None:
-            _log.warning("⚠️  Aucun fichier audio de référence trouvé — synthèse sans voice prompt.")
+            # Sans voix de référence, le modèle retombe sur le `conds.pt` livré
+            # avec le checkpoint : la synthèse fonctionne, mais avec une autre
+            # voix. Personne ne s'en aperçoit avant d'écouter, d'où le détail.
+            _log.warning(
+                "voix de référence introuvable — la synthèse utilisera la voix "
+                "par défaut du modèle, pas celle du projet. Cherché : %s",
+                " · ".join(str(c) for c in candidates))
         else:
             # L'identité vocale est extraite une fois pour toutes. Passer
             # `audio_prompt_path` à generate() relancerait sinon le décodage du
