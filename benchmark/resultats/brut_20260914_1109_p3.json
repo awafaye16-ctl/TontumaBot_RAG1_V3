@@ -1,0 +1,167 @@
+{
+  "configuration": {
+    "horodatage": "2026-09-14T11:08:34",
+    "commit": "9acb635",
+    "arbre_propre": false,
+    "machine": "Darwin arm64",
+    "backends": {
+      "torch": "2.11.0",
+      "auto": "mps",
+      "cuda": false,
+      "mps": true,
+      "override": "auto",
+      "par_composant": {}
+    },
+    "llm_provider": "groq",
+    "llm_modele": "openai/gpt-oss-120b",
+    "llm_max_phrases": 3,
+    "llm_max_tokens": 800,
+    "reranker_top_k": 5,
+    "tts_n_steps": 4,
+    "tts_chunk_chars": 200,
+    "n_chunks_indexes": 32
+  },
+  "avec_tts": false,
+  "repetitions": 1,
+  "prechauffage": true,
+  "resultats": [
+    {
+      "id": 1,
+      "repetition": 1,
+      "question_wo": "Naka la mën a jëme ci ospitaal bi ngir gis doktoor?",
+      "question_fr": "Comment peut-il aller à l'hôpital pour voir un médecin?",
+      "response_fr": "L'hôpital de Fann se situe dans le quartier de Fann, près de l'université. Vous pouvez y aller en bus, en taxi ou en voiture personnelle et stationner au parking de l'entrée principale. Entrez par l'entrée principale pour accéder à la consultation médicale.",
+      "response_wo": "Hopitaal bu Fann mingi nekk ci diwaanu Fann ci wetu iniwersite bi. Mën nga fa yegg ci bus wala taksi wala sa oto, nga gaare ci gaaraasu buntu bu mag bi. Duggal ci buntu bu mag bi ngir dem ci fajkatu pajum.",
+      "chunks": [
+        "doc-b1dfae6b327c36bd",
+        "doc-b9f709b4484117d7",
+        "doc-f4edce21c4aa2bef"
+      ],
+      "scores": [
+        5.261,
+        3.8756,
+        3.0917
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 5.98,
+      "latences_ms": {
+        "wo_fr": 1347.9,
+        "intent": 33.6,
+        "retrieval": 85.8,
+        "rerank": 83.9,
+        "llm": 1197.4,
+        "fr_wo": 3277.8,
+        "tts": null,
+        "total": 5975.1
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 8,
+      "repetition": 1,
+      "question_wo": "Naka laa mën a gis service pédiatrie bi?",
+      "question_fr": "Comment je peux voir le service de pédiatrie?",
+      "response_fr": "Je n'ai pas trouvé cette information dans ma base documentaire.",
+      "response_wo": "Gisuma xibaar bii ci sama base documentaire.",
+      "chunks": [
+        "doc-0dd334ef781d61ed",
+        "doc-56eed92070de4cbb",
+        "doc-bc679c42561c43ea"
+      ],
+      "scores": [
+        -2.3561,
+        -4.0415,
+        -7.256
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 2.71,
+      "latences_ms": {
+        "wo_fr": 976.2,
+        "intent": 50.7,
+        "retrieval": 89.3,
+        "rerank": 88.4,
+        "llm": 552.1,
+        "fr_wo": 1033.9,
+        "tts": null,
+        "total": 2714.8
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 13,
+      "repetition": 1,
+      "question_wo": "Naka laa mën a jëme ci service maternité bi?",
+      "question_fr": "Comment je peux aller à la maternité?",
+      "response_fr": "L’hôpital de Fann, qui abrite la maternité, se trouve dans le quartier de Fann, à proximité de l’université. Vous pouvez y accéder en bus, en taxi ou en voiture personnelle et utiliser le parking de l’entrée principale. Présentez‑vous à l’accueil de l’hôpital pour être orienté vers la maternité.",
+      "response_wo": "Lopitaalu Fan, bi nekk këru dayob jigéen, mu ngi ca goxu Fan, ci wetu daara ju kawe ji. Mën nga ci jaar ci saxaar, taksi wala woto te nga jëfandikoo gaaraas bi ngay gaaraas ci buntu bu mag bi. Ñëwal ca fa mbaarug lopitaal ba ngir ñu yóbbu la ca fajkag jigéen ga.",
+      "chunks": [
+        "doc-b1dfae6b327c36bd",
+        "doc-0dd334ef781d61ed",
+        "doc-bc679c42561c43ea"
+      ],
+      "scores": [
+        -9.1407,
+        -9.6289,
+        -10.8328
+      ],
+      "intent": "orientation",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 7.25,
+      "latences_ms": {
+        "wo_fr": 885.9,
+        "intent": 56.4,
+        "retrieval": 91.3,
+        "rerank": 90.3,
+        "llm": 1975.9,
+        "fr_wo": 4239.4,
+        "tts": null,
+        "total": 7249.4
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    }
+  ]
+}

@@ -20,6 +20,10 @@ from config import settings  # noqa: E402
 import chromadb
 import numpy as np
 
+from journal import journal
+
+_log = journal("vectorstore")
+
 EMBED_MODEL = settings.EMBED_MODEL
 COLLECTION  = "tontuma_v3"
 DB_DIR      = os.path.join(settings.BASE_DIR, "data", "chroma")
@@ -40,7 +44,7 @@ def get_embedder() -> "SentenceTransformer":
         from sentence_transformers import SentenceTransformer  # import lazy
         import device as _dev
         dev = _dev.resolve("embedder")
-        print(f"[VS] Chargement embedder ({EMBED_MODEL}) sur {dev.upper()}...")
+        _log.info(f"Chargement embedder ({EMBED_MODEL}) sur {dev.upper()}...")
         # Sans `device`, sentence-transformers refait sa propre détection : on
         # lui impose celle du pipeline pour que tout partage le même backend.
         _embedder = SentenceTransformer(EMBED_MODEL, device=dev)

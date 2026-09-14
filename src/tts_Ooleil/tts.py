@@ -15,6 +15,10 @@ from config import settings  # noqa: E402
 import numpy as np
 import soundfile as sf
 
+from journal import journal
+
+_log = journal("tts")
+
 # Énoncé de préchauffage : longueur représentative d'un morceau réel, pour que
 # les formes de tenseur compilées au démarrage servent aux vraies requêtes.
 _TEXTE_PRECHAUFFAGE = (
@@ -63,8 +67,8 @@ def _accelerer_attention(model) -> bool:
     l'analyzer lit vraiment les attentions et les couper le casserait.
     """
     if getattr(model.t3.hp, "is_multilingual", False):
-        print("[TTS] checkpoint multilingue : attentions conservées "
-              "(AlignmentStreamAnalyzer actif)")
+        _log.info("checkpoint multilingue : attentions conservées "
+                  "(AlignmentStreamAnalyzer actif)")
         return False
 
     from models.t3.inference.t3_hf_backend import T3HuggingfaceBackend
@@ -91,16 +95,15 @@ def _load() -> bool:
     try:
         ckpt_dir = _find_cache()
         if ckpt_dir is None:
-            print(f"[TTS] Téléchargement Oolel-Voices ({settings.OOLEL_TTS_REPO})...")
+            _log.info(f"Téléchargement Oolel-Voices ({settings.OOLEL_TTS_REPO})...")
             from huggingface_hub import snapshot_download
             ckpt_dir = Path(snapshot_download(repo_id=settings.OOLEL_TTS_REPO))
-            print(f"[TTS] Oolel-Voices téléchargé → {ckpt_dir}")
-
+            _log.info(f"Oolel-Voices téléchargé → {ckpt_dir}")
         ckpt_str = str(ckpt_dir)
         if ckpt_str not in sys.path:
             sys.path.insert(0, ckpt_str)
 
-        print(f"[TTS] Chargement Oolel-Voices depuis {ckpt_dir}...")
+        _log.info(f"Chargement Oolel-Voices depuis {ckpt_dir}...")
         from modeling_oolel_voices import OolelVoicesForInference  # type: ignore
 
         # Backend commun au pipeline (surcharge : TTS_DEVICE)
@@ -111,8 +114,7 @@ def _load() -> bool:
         _model.eval()
 
         if _accelerer_attention(_model):
-            print("[TTS] Attention optimisée (SDPA) rétablie sur le décodeur T3")
-
+            _log.info("Attention optimisée (SDPA) rétablie sur le décodeur T3")
         # ── Accélération vocodeur : réduire les itérations de diffusion ──
         n_cfm = getattr(settings, "TTS_N_STEPS", 10)
         if n_cfm and 1 <= n_cfm < 10:
@@ -125,8 +127,7 @@ def _load() -> bool:
                 return _orig_inf(*args, n_cfm_timesteps=n_cfm_timesteps, **kwargs)
 
             s3gen.inference = _fast_inference
-            print(f"[TTS] Vocodeur accéléré : {n_cfm} itérations (au lieu de 10)")
-
+            _log.info(f"Vocodeur accéléré : {n_cfm} itérations (au lieu de 10)")
         # Prompt audio de référence pour le voice cloning
         candidates = [
             ckpt_dir / "8_1_c.wav",
@@ -136,11 +137,11 @@ def _load() -> bool:
         for c in candidates:
             if c.exists():
                 _prompt = str(c)
-                print(f"[TTS] Voice prompt : {_prompt}")
+                _log.info(f"Voice prompt : {_prompt}")
                 break
 
         if _prompt is None:
-            print("[TTS] ⚠️  Aucun fichier audio de référence trouvé — synthèse sans voice prompt.")
+            _log.warning("⚠️  Aucun fichier audio de référence trouvé — synthèse sans voice prompt.")
         else:
             # L'identité vocale est extraite une fois pour toutes. Passer
             # `audio_prompt_path` à generate() relancerait sinon le décodage du
@@ -148,14 +149,13 @@ def _load() -> bool:
             # chaque appel — et le découpage en phrases multiplie les appels.
             t0 = time.perf_counter()
             _model.prepare_conditionals(_prompt, exaggeration=0.5)
-            print(f"[TTS] Identité vocale préparée ({time.perf_counter() - t0:.1f}s)")
-
+            _log.info(f"Identité vocale préparée ({time.perf_counter() - t0:.1f}s)")
         _ready = True
-        print("[TTS] Oolel-Voices prêt.")
+        _log.info("Oolel-Voices prêt.")
         return True
 
     except Exception as e:
-        print(f"[TTS] Oolel-Voices indisponible ({type(e).__name__}: {e})")
+        _log.error(f"Oolel-Voices indisponible ({type(e).__name__}: {e})")
         return False
 
 
@@ -258,7 +258,7 @@ def _etirer(audio: np.ndarray) -> np.ndarray:
     t0 = time.perf_counter()
     # librosa.effects.time_stretch(rate>1) → ralentit
     etire = librosa.effects.time_stretch(audio, rate=speed)
-    print(f"[TTS] Time-stretch rate={speed} ({time.perf_counter() - t0:.2f}s)")
+    _log.info(f"Time-stretch rate={speed} ({time.perf_counter() - t0:.2f}s)")
     return etire
 
 
@@ -300,9 +300,9 @@ def synthesize(text: str, out_path: str, on_chunk=None) -> str:
         # le fichier complet doivent s'entendre pareil.
         audio = _etirer(_synthetiser(morceau))
         if total > 1:
-            print(f"[TTS] morceau {i}/{total} ({len(morceau)} car.) "
-                  f"→ {len(audio) / _model.sr:.1f}s d'audio "
-                  f"en {time.perf_counter() - t0:.1f}s")
+            _log.info("morceau %d/%d (%d car.) → %.1f s d'audio en %.1f s",
+                      i, total, len(morceau), len(audio) / _model.sr,
+                      time.perf_counter() - t0)
             if segments:
                 segments.append(silence)
         segments.append(audio)
@@ -317,13 +317,13 @@ def synthesize(text: str, out_path: str, on_chunk=None) -> str:
             except Exception as e:
                 # La diffusion est un confort : si elle échoue, la synthèse va
                 # au bout et le client lira le fichier complet.
-                print(f"[TTS] diffusion du morceau {i} impossible "
-                      f"({type(e).__name__}: {e})")
+                _log.error("diffusion du morceau %d impossible (%s: %s)",
+                           i, type(e).__name__, e)
 
     audio_np = segments[0] if len(segments) == 1 else np.concatenate(segments)
     if total > 1:
-        print(f"[TTS] {total} morceaux → {len(audio_np) / _model.sr:.1f}s "
-              f"d'audio en {time.perf_counter() - t_debut:.1f}s")
+        _log.info("%d morceaux → %.1f s d'audio en %.1f s", total,
+                  len(audio_np) / _model.sr, time.perf_counter() - t_debut)
 
     sf.write(out_path, audio_np, _model.sr, format="WAV")
     _rendre_cache()
@@ -374,9 +374,9 @@ def prechauffer() -> bool:
     except Exception as e:
         # Un préchauffage raté ne doit pas condamner le TTS : la vraie synthèse
         # retentera, et échouera alors avec son propre message.
-        print(f"[TTS] Préchauffage ignoré ({type(e).__name__}: {e})")
+        _log.warning(f"Préchauffage ignoré ({type(e).__name__}: {e})")
         return False
-    print(f"[TTS] Moteur préchauffé ({time.perf_counter() - t0:.1f}s)")
+    _log.info(f"Moteur préchauffé ({time.perf_counter() - t0:.1f}s)")
     return True
 
 
@@ -396,4 +396,4 @@ if __name__ == "__main__":
     txt = _sys.argv[1] if len(_sys.argv) > 1 else "Jàmm nga fanaan. Nanga def?"
     out = _sys.argv[2] if len(_sys.argv) > 2 else "test_v3.wav"
     result = synthesize(txt, out)
-    print(f"[TTS] {source()} → {result}")
+    _log.info(f"{source()} → {result}")

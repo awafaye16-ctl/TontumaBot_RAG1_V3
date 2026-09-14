@@ -1,0 +1,120 @@
+{
+  "configuration": {
+    "horodatage": "2026-09-14T11:05:02",
+    "commit": "9acb635",
+    "arbre_propre": false,
+    "machine": "Darwin arm64",
+    "backends": {
+      "torch": "2.11.0",
+      "auto": "mps",
+      "cuda": false,
+      "mps": true,
+      "override": "auto",
+      "par_composant": {}
+    },
+    "llm_provider": "groq",
+    "llm_modele": "openai/gpt-oss-120b",
+    "llm_max_phrases": 3,
+    "llm_max_tokens": 800,
+    "reranker_top_k": 5,
+    "tts_n_steps": 4,
+    "tts_chunk_chars": 200,
+    "n_chunks_indexes": 32
+  },
+  "avec_tts": false,
+  "repetitions": 1,
+  "resultats": [
+    {
+      "id": 1,
+      "repetition": 1,
+      "question_wo": "Naka la mën a jëme ci ospitaal bi ngir gis doktoor?",
+      "question_fr": "Comment peut-il aller à l'hôpital pour voir un médecin?",
+      "response_fr": "L'hôpital de Fann se situe dans le quartier de Fann, à proximité de l'université. Vous pouvez y venir en bus, en taxi ou en voiture personnelle, le parking se trouve à l'entrée principale. Pour une consultation, utilisez l'entrée principale de l'hôpital.",
+      "response_wo": "Hopitaal bu Fann mingi nekk ci diwaanu Fann, ci wetu iniwersite bi. Mën nga fa yegsi ci bus wala taksi, ndax gaaraas bi mingi ci buntu bu mag bi. Jëfandikool buntu bu mag bi ngir saytu yaram",
+      "chunks": [
+        "doc-b1dfae6b327c36bd",
+        "doc-b9f709b4484117d7",
+        "doc-f4edce21c4aa2bef"
+      ],
+      "scores": [
+        5.261,
+        3.8756,
+        3.0917
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 36.19,
+      "latences_ms": {
+        "wo_fr": 17781.5,
+        "intent": 8912.7,
+        "retrieval": 4655.2,
+        "rerank": 4642.7,
+        "llm": 1413.7,
+        "fr_wo": 3373.4,
+        "tts": null,
+        "total": 36191.7
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 8,
+      "repetition": 1,
+      "question_wo": "Naka laa mën a gis service pédiatrie bi?",
+      "question_fr": "Comment je peux voir le service de pédiatrie?",
+      "response_fr": "Je n'ai pas trouvé cette information dans ma base documentaire.",
+      "response_wo": "Gisuma xibaar bii ci sama base documentaire.",
+      "chunks": [
+        "doc-0dd334ef781d61ed",
+        "doc-56eed92070de4cbb",
+        "doc-bc679c42561c43ea"
+      ],
+      "scores": [
+        -2.3561,
+        -4.0415,
+        -7.256
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 3.46,
+      "latences_ms": {
+        "wo_fr": 984.0,
+        "intent": 63.3,
+        "retrieval": 253.2,
+        "rerank": 251.6,
+        "llm": 1050.1,
+        "fr_wo": 1085.6,
+        "tts": null,
+        "total": 3455.0
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    }
+  ]
+}

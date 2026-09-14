@@ -1,0 +1,1041 @@
+[
+  {
+    "id": 1,
+    "question_wo": "Naka la mën a jëme ci ospitaal bi ngir gis doktoor?",
+    "question_fr": "Comment peut-il aller à l'hôpital pour voir un médecin?",
+    "repondable": true,
+    "reponse": "Pour consulter un médecin en consultation ordinaire, le patient doit d’abord se rendre à un poste de santé ou à un centre de santé, qui le dirige vers l’hôpital en lui délivrant une lettre de référence ; il présente ensuite cette référence à l’accueil de l’hôpital avec sa pièce d’identité (carte nationale ou passeport) et, le cas échéant, ses anciens résultats d’examens et sa carte de couverture maladie ; l’agent d’accueil enregistre le patient, lui remet un ticket de passage et il attend son tour dans la salle d’attente ; en cas d’urgence, le patient peut se rendre directement aux urgences sans référence ni rendez‑vous.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-ec6625e19164dd27",
+      "doc-f1f4d8982d4cd82b",
+      "doc-b42e365cd1e33b90",
+      "doc-bc679c42561c43ea"
+    ],
+    "chunks_numeros": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Se rendre d'abord à un poste de santé ou à un centre de santé pour obtenir une lettre de référence.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "poste de santé",
+          "centre de santé",
+          "lettre de référence"
+        ]
+      },
+      {
+        "fait": "Présenter la lettre de référence à l'accueil de l'hôpital avec une pièce d'identité et, si besoin, les résultats d'examens antérieurs et la carte de couverture maladie.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "lettre de référence",
+          "pièce d'identité",
+          "résultats d'examens",
+          "carte de couverture"
+        ]
+      },
+      {
+        "fait": "En cas d'urgence, se rendre directement aux urgences sans référence ni rendez‑vous.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "urgence",
+          "directement aux urgences",
+          "sans référence"
+        ]
+      },
+      {
+        "fait": "L'agent d'accueil enregistre le patient, remet un ticket de passage et le patient attend dans la salle d'attente.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "agent d'accueil",
+          "enregistre",
+          "ticket de passage",
+          "salle d'attente"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "question_wo": "Lan laa war a def bu ma bëggee def rendez-vous ci ospitaal?",
+    "question_fr": "Que dois-je faire pour prendre un rendez-vous à l'hôpital?",
+    "repondable": true,
+    "reponse": "Pour prendre un rendez‑vous, le patient doit se rendre au bureau des rendez‑vous à l’accueil ou appeler le numéro de l’accueil afin de réserver une date. Le jour du rendez‑vous il doit arriver au moins trente minutes avant l’heure fixée. Il doit présenter sa pièce d’identité, la lettre de référence délivrée par la structure de santé, ses anciens résultats d’examens et, s’il est assuré, sa carte de couverture maladie.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-b10b722dc095f1ad",
+      "doc-4f32d1c430d007e7"
+    ],
+    "chunks_numeros": [
+      24,
+      25
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Pour prendre un rendez‑vous, le patient doit se rendre au bureau des rendez‑vous à l’accueil ou appeler le numéro de l’accueil afin de réserver une date.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "bureau des rendez‑vous",
+          "appel"
+        ]
+      },
+      {
+        "fait": "Le jour du rendez‑vous le patient doit arriver au moins trente minutes avant l’heure fixée.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "trente minutes",
+          "avant"
+        ]
+      },
+      {
+        "fait": "Le patient doit présenter sa pièce d’identité, la lettre de référence, ses anciens résultats d’examens et, s’il est assuré, sa carte de couverture maladie.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "pièce d’identité",
+          "lettre de référence",
+          "carte de couverture"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "question_wo": "Naka laa mën a gis service urgences bi?",
+    "question_fr": "Comment je peux trouver le service d'urgence?",
+    "repondable": true,
+    "reponse": "Pour accéder au service d’urgence, il faut se rendre directement à l’hôpital, sans passer par le poste ou le centre de santé et sans lettre de référence. L’entrée des urgences se trouve à la seconde porte de l’hôpital (voir passage 19) et le service fonctionne jour et nuit, y compris les week‑ends et jours fériés (passage 26). Le patient peut se présenter immédiatement ; l’équipe le reçoit selon la gravité de son état (passage 10).",
+    "motif": "",
+    "chunks_ids": [
+      "doc-a7891ab61ea7ea3d",
+      "doc-b1dfae6b327c36bd",
+      "doc-4db81c0b481e30e9"
+    ],
+    "chunks_numeros": [
+      26,
+      19,
+      10
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Aller directement à l'hôpital, sans passer par le poste ni le centre de santé, sans lettre de référence.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "hôpital",
+          "poste",
+          "centre de santé",
+          "lettre de référence"
+        ]
+      },
+      {
+        "fait": "L'entrée des urgences se trouve à la seconde porte de l'hôpital.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "seconde porte",
+          "entrée",
+          "urgences"
+        ]
+      },
+      {
+        "fait": "Le service d'urgence fonctionne jour et nuit, y compris les week‑ends et jours fériés.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "jour et nuit",
+          "week‑ends",
+          "jours fériés"
+        ]
+      },
+      {
+        "fait": "Le patient peut se présenter immédiatement et sera reçu selon la gravité de son état.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "présenter immédiatement",
+          "gravité",
+          "état"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "question_wo": "Ana ban service laa war a dem bu ma amee feebar bu metti?",
+    "question_fr": "Et à quel service dois-je m'adresser si je suis sévèrement malade?",
+    "repondable": true,
+    "reponse": "En cas de maladie sévère, vous devez vous rendre directement au service des urgences de l'hôpital, sans besoin de lettre de référence. Le service des urgences fonctionne jour et nuit, y compris les week‑ends et jours fériés, et accueille les patients en danger immédiat.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-a7891ab61ea7ea3d",
+      "doc-4db81c0b481e30e9",
+      "doc-155c516c8b65bbc4"
+    ],
+    "chunks_numeros": [
+      26,
+      10,
+      27
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Le service des urgences de l'hôpital doit être contacté en cas de maladie sévère.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "service des urgences",
+          "urgences"
+        ]
+      },
+      {
+        "fait": "Aucun document de référence, telle qu’une lettre, n’est requis pour se rendre aux urgences.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "sans besoin de lettre",
+          "pas de lettre"
+        ]
+      },
+      {
+        "fait": "Le service des urgences fonctionne 24 h/24 et 7 j/7, y compris les week‑ends et jours fériés.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "24 h/24",
+          "7 j/7",
+          "week‑ends",
+          "jours fériés"
+        ]
+      },
+      {
+        "fait": "Les urgences accueillent les patients en danger immédiat.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "danger immédiat",
+          "patients en danger"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "question_wo": "Lan mooy ay procédure ngir def examen ci ospitaal?",
+    "question_fr": "Quelles sont les procédures pour un examen hospitalier?",
+    "repondable": true,
+    "reponse": "Pour passer un examen à l’hôpital, le patient doit d’abord être orienté depuis un poste ou un centre de santé et présenter la lettre de référence ainsi que sa pièce d’identité, ses anciens résultats d’examens et, le cas échéant, sa carte de couverture maladie (Passages 4, 5). À son arrivée, il se présente à l’accueil où l’agent enregistre son dossier, crée un ticket de passage et l’attend dans la salle d’attente (Passage 7). Lors de la consultation, le médecin écoute les plaintes, examine le patient et peut demander des examens complémentaires (analyses de sang, radiographie ou échographie) avant de remettre une ordonnance (Passage 8).",
+    "motif": "",
+    "chunks_ids": [
+      "doc-b42e365cd1e33b90",
+      "doc-6c5f303645af6340",
+      "doc-c1bbf8f780cada52",
+      "doc-f1f4d8982d4cd82b",
+      "doc-ec6625e19164dd27"
+    ],
+    "chunks_numeros": [
+      5,
+      7,
+      8,
+      4,
+      3
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Le patient doit être orienté depuis un poste ou un centre de santé et présenter une lettre de référence",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "poste",
+          "centre de santé",
+          "lettre de référence"
+        ]
+      },
+      {
+        "fait": "Le patient doit présenter sa pièce d’identité, ses anciens résultats d’examens et sa carte de couverture maladie",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "pièce d’identité",
+          "résultats d’examens",
+          "carte de couverture maladie"
+        ]
+      },
+      {
+        "fait": "À son arrivée, le patient se rend à l’accueil pour enregistrer son dossier et obtenir un ticket de passage",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "accueil",
+          "enregistrer",
+          "ticket de passage"
+        ]
+      },
+      {
+        "fait": "L’agent enregistre le dossier du patient et crée un ticket de passage",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "agent",
+          "enregistre",
+          "ticket"
+        ]
+      },
+      {
+        "fait": "Le patient attend dans la salle d’attente",
+        "rang": 5,
+        "importance": "complementaire",
+        "indices": [
+          "salle d’attente",
+          "attend"
+        ]
+      },
+      {
+        "fait": "Le médecin écoute les plaintes, examine le patient et peut demander des examens complémentaires",
+        "rang": 6,
+        "importance": "complementaire",
+        "indices": [
+          "médecin",
+          "examen complémentaires",
+          "écoute"
+        ]
+      },
+      {
+        "fait": "Le médecin remet une ordonnance après la consultation",
+        "rang": 7,
+        "importance": "complementaire",
+        "indices": [
+          "ordonnance",
+          "remet",
+          "consultation"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "question_wo": "Naka laa mën a jëfandikoo assurance maladie ci ospitaal?",
+    "question_fr": "Comment puis-je faire appel à une assurance maladie hospitalière?",
+    "repondable": true,
+    "reponse": "Pour bénéficier de la prise en charge de votre assurance maladie, vous devez d’abord être inscrit(e) à une mutuelle ou à la couverture maladie universelle. Lors de votre visite à l’hôpital, apportez votre carte de couverture maladie (ou mutuelle) ainsi que votre pièce d’identité ; la carte doit être présentée à l’accueil ou au service d’enregistrement. Elle permet de réduire le montant à payer pour la consultation, les examens et les médicaments.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-b42e365cd1e33b90",
+      "doc-e4c868112f776a65",
+      "doc-2dea26ea91d39dbd",
+      "doc-1c1fa0efb7163618"
+    ],
+    "chunks_numeros": [
+      5,
+      13,
+      12,
+      30
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Être inscrit à une mutuelle ou à la couverture maladie universelle",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "mutuelle",
+          "couverture maladie universelle",
+          "inscrit"
+        ]
+      },
+      {
+        "fait": "Apporter la carte de couverture maladie et une pièce d’identité à l’accueil de l’hôpital",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "carte",
+          "pièce d’identité",
+          "accueil",
+          "hôpital"
+        ]
+      },
+      {
+        "fait": "Présenter la carte réduit le montant à payer pour la consultation, les examens et les médicaments",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "réduire",
+          "montant",
+          "consultation",
+          "examens",
+          "médicaments"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "question_wo": "Ana laa war a dem ngir def prise de sang?",
+    "question_fr": "Où devrais-je aller faire une prise de départ?",
+    "repondable": true,
+    "reponse": "Vous devez vous rendre à l’hôpital, au service de laboratoire, où les analyses de sang sont réalisées après que le médecin vous ait prescrit cet examen complémentaire.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-c1bbf8f780cada52",
+      "doc-ec6625e19164dd27"
+    ],
+    "chunks_numeros": [
+      8,
+      3
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Se rendre à l'hôpital, service de laboratoire",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "hôpital",
+          "laboratoire",
+          "service"
+        ]
+      },
+      {
+        "fait": "Obtenir une prescription du médecin pour l'examen complémentaire",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "prescription",
+          "médecin",
+          "examen"
+        ]
+      },
+      {
+        "fait": "Les analyses de sang sont réalisées au service de laboratoire",
+        "rang": 3,
+        "importance": "complementaire",
+        "indices": [
+          "analyses",
+          "sang",
+          "laboratoire"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 8,
+    "question_wo": "Naka laa mën a gis service pédiatrie bi?",
+    "question_fr": "Comment je peux voir le service de pédiatrie?",
+    "repondable": false,
+    "reponse": "",
+    "motif": "Le corpus ne contient aucune information sur l'existence, l'emplacement ou la procédure d'accès au service de pédiatrie.",
+    "chunks_ids": [],
+    "chunks_numeros": [],
+    "valide": false,
+    "faits": []
+  },
+  {
+    "id": 9,
+    "question_wo": "Bu ma bëggee gis gynécologue, ana service laa war a dem?",
+    "question_fr": "Si je veux voir un gynécologue, où devrais-je aller?",
+    "repondable": false,
+    "reponse": "",
+    "motif": "Le corpus ne mentionne aucun service de gynécologie ni l'endroit où se rendre pour consulter un gynécologue.",
+    "chunks_ids": [],
+    "chunks_numeros": [],
+    "valide": false,
+    "faits": []
+  },
+  {
+    "id": 10,
+    "question_wo": "Lan laa war a indi bu ma bëggee dem ci ospitaal ngir consultation?",
+    "question_fr": "Que dois-je apporter si je veux aller à l'hôpital pour une consultation?",
+    "repondable": true,
+    "reponse": "Pour une consultation ordinaire, le patient doit apporter une pièce d’identité (carte nationale d’identité ou passeport). Si la consultation résulte d’une orientation, il faut la lettre de référence. Il est recommandé d’apporter le carnet de santé de l’enfant, les anciens résultats d’examens et, le cas échéant, la carte de couverture maladie qui permet de réduire le coût des soins.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-b42e365cd1e33b90",
+      "doc-f1f4d8982d4cd82b",
+      "doc-4f32d1c430d007e7"
+    ],
+    "chunks_numeros": [
+      5,
+      4,
+      25
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Apporter une pièce d’identité (carte nationale d’identité ou passeport)",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "pièce d’identité",
+          "carte nationale",
+          "passeport"
+        ]
+      },
+      {
+        "fait": "Apporter la lettre de référence si la consultation résulte d’une orientation",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "lettre de référence",
+          "orientation"
+        ]
+      },
+      {
+        "fait": "Apporter la carte de couverture maladie pour réduire le coût des soins",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "carte de couverture maladie",
+          "réduire le coût"
+        ]
+      },
+      {
+        "fait": "Apporter le carnet de santé de l’enfant et les anciens résultats d’examens (recommandé)",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "carnet de santé",
+          "anciens résultats",
+          "examens"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 11,
+    "question_wo": "Naka laa mën a xam fan la service cardiologie nekk?",
+    "question_fr": "Comment je peux savoir où est le service de cardiologie?",
+    "repondable": false,
+    "reponse": "",
+    "motif": "Le corpus ne contient aucune information sur l'existence ou l'emplacement d'un service de cardiologie.",
+    "chunks_ids": [],
+    "chunks_numeros": [],
+    "valide": false,
+    "faits": []
+  },
+  {
+    "id": 12,
+    "question_wo": "Ana laa war a dem ngir def radiographie?",
+    "question_fr": "Où devrais-je aller pour une radiographie?",
+    "repondable": true,
+    "reponse": "Pour obtenir une radiographie, il faut d’abord consulter un médecin à l’hôpital. Le médecin pourra prescrire la radiographie comme examen complémentaire et vous dirigera vers le service d’imagerie de l’hôpital où cet examen est réalisé.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-c1bbf8f780cada52",
+      "doc-ec6625e19164dd27"
+    ],
+    "chunks_numeros": [
+      8,
+      3
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Consulter un médecin à l’hôpital",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "consulter",
+          "médecin",
+          "hôpital"
+        ]
+      },
+      {
+        "fait": "Le médecin prescrit la radiographie",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "médecin",
+          "prescrit",
+          "radiographie"
+        ]
+      },
+      {
+        "fait": "Se rendre au service d’imagerie de l’hôpital",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "service",
+          "imagerie",
+          "hôpital"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 13,
+    "question_wo": "Naka laa mën a jëme ci service maternité bi?",
+    "question_fr": "Comment je peux aller à la maternité?",
+    "repondable": true,
+    "reponse": "Pour accéder au service de maternité, le patient doit d’abord être orienté depuis un poste ou un centre de santé qui lui remettra une lettre de référence. Il doit ensuite se rendre à l’hôpital, présenter sa pièce d’identité, la lettre de référence ainsi que, le cas échéant, sa carte de couverture maladie et ses anciens résultats d’examens. À l’accueil, l’agent enregistre le patient et le dirige vers le service concerné. En cas d’urgence obstétricale, il peut se rendre directement aux urgences sans référence.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-ec6625e19164dd27",
+      "doc-f1f4d8982d4cd82b",
+      "doc-b42e365cd1e33b90",
+      "doc-bc679c42561c43ea",
+      "doc-4db81c0b481e30e9",
+      "doc-772a0d575bea3925"
+    ],
+    "chunks_numeros": [
+      3,
+      4,
+      5,
+      6,
+      10,
+      14
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Obtenir une lettre de référence auprès d’un poste ou centre de santé.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "lettre de référence",
+          "poste",
+          "centre de santé"
+        ]
+      },
+      {
+        "fait": "Se rendre à l’hôpital et présenter pièce d’identité, lettre de référence, carte de couverture maladie et résultats d’examens.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "hôpital",
+          "pièce d’identité",
+          "carte de couverture maladie",
+          "résultats d’examens"
+        ]
+      },
+      {
+        "fait": "En cas d’urgence obstétricale, se rendre directement aux urgences sans référence.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "urgence obstétricale",
+          "urgences",
+          "sans référence"
+        ]
+      },
+      {
+        "fait": "À l’accueil, l’agent enregistre le patient et le dirige vers le service de maternité.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "accueil",
+          "enregistre",
+          "dirige",
+          "service de maternité"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 14,
+    "question_wo": "Lan laa war a def bu ma bëggee dugal sama bopp ci ospitaal?",
+    "question_fr": "Que dois-je faire si je veux me mettre à l'hôpital?",
+    "repondable": true,
+    "reponse": "Pour être admis à l'hôpital, il faut d'abord être orienté par un poste ou un centre de santé qui vous remettra une lettre de référence (voir passages 3 et 4). Vous devez ensuite vous présenter à l'accueil de l'hôpital avec votre pièce d'identité, la lettre de référence, vos anciens résultats d'examens et, si vous êtes assuré, votre carte de couverture maladie (passages 5 et 7). Arrivez tôt, surtout pour les consultations ordinaires qui ont lieu du lundi au vendredi, et présentez vos documents au guichet d'accueil où l’on vous enregistrera et vous remettra un ticket d’attente (passages 6 et 7).",
+    "motif": "",
+    "chunks_ids": [
+      "doc-f1f4d8982d4cd82b",
+      "doc-b42e365cd1e33b90",
+      "doc-6c5f303645af6340",
+      "doc-bc679c42561c43ea",
+      "doc-ec6625e19164dd27"
+    ],
+    "chunks_numeros": [
+      4,
+      5,
+      7,
+      6,
+      3
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Obtenir une lettre de référence auprès d’un poste ou d’un centre de santé.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "lettre de référence",
+          "poste",
+          "centre de santé"
+        ]
+      },
+      {
+        "fait": "Se présenter à l’accueil de l’hôpital avec une pièce d’identité, la lettre de référence, les résultats d’examens antérieurs et, si assuré, la carte de couverture maladie.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "pièce d'identité",
+          "lettre de référence",
+          "résultats d'examens",
+          "carte de couverture maladie"
+        ]
+      },
+      {
+        "fait": "Arriver tôt, surtout du lundi au vendredi pour les consultations ordinaires, et remettre les documents au guichet d’accueil pour recevoir un ticket d’attente.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "arrivez tôt",
+          "lundi au vendredi",
+          "consultations ordinaires",
+          "ticket d’attente"
+        ]
+      },
+      {
+        "fait": "Le personnel enregistre le patient au guichet d’accueil.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "enregistrera",
+          "guichet d'accueil"
+        ]
+      },
+      {
+        "fait": "Le personnel remet un ticket d’attente après l’enregistrement.",
+        "rang": 5,
+        "importance": "complementaire",
+        "indices": [
+          "remettra",
+          "ticket d’attente"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 15,
+    "question_wo": "Naka laa mën a xam ay waxtu yu consultation yi?",
+    "question_fr": "Comment je peux connaître les horaires des consultations?",
+    "repondable": true,
+    "reponse": "Les consultations ordinaires se tiennent du lundi au vendredi. Pour les consultations externes, elles ont lieu du lundi au vendredi, le matin et l’après‑midi. Vous pouvez confirmer ces horaires à l’accueil ou dans le guide du patient.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-155c516c8b65bbc4",
+      "doc-b42e365cd1e33b90"
+    ],
+    "chunks_numeros": [
+      27,
+      5
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Les horaires peuvent être confirmés à l’accueil ou dans le guide du patient.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "accueil",
+          "guide du patient",
+          "confirmer"
+        ]
+      },
+      {
+        "fait": "Les consultations ordinaires se tiennent du lundi au vendredi.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "lundi",
+          "vendredi",
+          "consultations ordinaires"
+        ]
+      },
+      {
+        "fait": "Les consultations externes ont lieu du lundi au vendredi, le matin et l’après‑midi.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "externes",
+          "matin",
+          "après‑midi",
+          "lundi",
+          "vendredi"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 16,
+    "question_wo": "Ana service laa war a dem bu ma bëggee def scanner?",
+    "question_fr": "Où dois-je aller pour un scanner?",
+    "repondable": false,
+    "reponse": "",
+    "motif": "Le corpus ne précise pas le service ou le lieu où le patient doit se rendre pour un scanner.",
+    "chunks_ids": [],
+    "chunks_numeros": [],
+    "valide": false,
+    "faits": []
+  },
+  {
+    "id": 17,
+    "question_wo": "Naka laa mën a jëme ci service pharmacie bi ci ospitaal?",
+    "question_fr": "Comment puis-je me joindre au service de pharmacie de l'hôpital?",
+    "repondable": false,
+    "reponse": "",
+    "motif": "Le corpus ne fournit aucune information sur la façon de contacter ou de localiser le service de pharmacie de l'hôpital.",
+    "chunks_ids": [],
+    "chunks_numeros": [],
+    "valide": false,
+    "faits": []
+  },
+  {
+    "id": 18,
+    "question_wo": "Lan laa war a def ngir sàkku dossier médical?",
+    "question_fr": "Que dois-je faire pour demander un dossier médical?",
+    "repondable": true,
+    "reponse": "Pour obtenir votre dossier médical, vous devez vous présenter d'abord à l'accueil de l'hôpital avec votre pièce d'identité (carte nationale ou passeport) et, le cas échéant, la lettre de référence ainsi que vos anciens résultats d'examens et votre carte de couverture maladie. L'agent d'accueil enregistre votre arrivée, crée un dossier médical à votre nom et vous remet un ticket ou un numéro de passage qui vous permettra de récupérer votre dossier. Arrivez tôt pour éviter l'attente et faciliter la procédure.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-f1f4d8982d4cd82b",
+      "doc-b42e365cd1e33b90",
+      "doc-6c5f303645af6340"
+    ],
+    "chunks_numeros": [
+      4,
+      5,
+      7
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Se présenter à l'accueil de l'hôpital.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "accueil",
+          "hôpital",
+          "se présenter"
+        ]
+      },
+      {
+        "fait": "Apporter pièce d'identité, lettre de référence, anciens résultats d'examens et carte de couverture maladie.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "pièce d'identité",
+          "lettre de référence",
+          "résultats d'examens",
+          "carte de couverture"
+        ]
+      },
+      {
+        "fait": "Arriver tôt pour éviter l'attente et faciliter la procédure.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "arriver tôt",
+          "éviter l'attente",
+          "faciliter procédure"
+        ]
+      },
+      {
+        "fait": "L'agent d'accueil enregistre l'arrivée du demandeur.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "agent d'accueil",
+          "enregistre",
+          "arrivée"
+        ]
+      },
+      {
+        "fait": "L'agent crée un dossier médical au nom du demandeur.",
+        "rang": 5,
+        "importance": "complementaire",
+        "indices": [
+          "crée",
+          "dossier médical",
+          "nom"
+        ]
+      },
+      {
+        "fait": "L'agent remet un ticket ou un numéro de passage pour récupérer le dossier.",
+        "rang": 6,
+        "importance": "complementaire",
+        "indices": [
+          "ticket",
+          "numéro de passage",
+          "récupérer dossier"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 19,
+    "question_wo": "Naka laa mën a xam fan laa war a dem bu ma amee rendez-vous ci ospitaal?",
+    "question_fr": "Comment savoir où aller quand j'ai un rendez-vous à l'hôpital?",
+    "repondable": true,
+    "reponse": "Pour un rendez‑vous, le patient doit se rendre à l’accueil de l’hôpital, au bureau des rendez‑vous, en arrivant au moins trente minutes avant l’heure fixée. Il présente sa pièce d’identité et la lettre de référence, puis attend son tour dans la salle d’attente du service concerné. L’entrée principale de l’hôpital de Fann est utilisée pour les consultations, tandis que l’entrée des urgences est réservée aux cas d’urgence. Le patient peut venir en bus, en taxi ou en voiture personnelle et un parking est disponible à l’entrée principale.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-b10b722dc095f1ad",
+      "doc-4f32d1c430d007e7",
+      "doc-b1dfae6b327c36bd"
+    ],
+    "chunks_numeros": [
+      24,
+      25,
+      19
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "Se rendre à l'accueil du bureau des rendez‑vous de l'hôpital.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "accueil",
+          "bureau des rendez‑vous",
+          "hôpital"
+        ]
+      },
+      {
+        "fait": "Arriver au moins trente minutes avant l'heure du rendez‑vous.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "trente minutes",
+          "avant",
+          "heure"
+        ]
+      },
+      {
+        "fait": "Présenter une pièce d’identité et la lettre de référence.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "pièce d’identité",
+          "lettre de référence"
+        ]
+      },
+      {
+        "fait": "Utiliser l'entrée principale de l'hôpital de Fann pour les consultations.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "entrée principale",
+          "Fann",
+          "consultations"
+        ]
+      },
+      {
+        "fait": "Réserver l'entrée des urgences aux cas d'urgence uniquement.",
+        "rang": 5,
+        "importance": "complementaire",
+        "indices": [
+          "entrée des urgences",
+          "urgences",
+          "cas d’urgence"
+        ]
+      },
+      {
+        "fait": "Se déplacer en bus, en taxi ou en voiture personnelle.",
+        "rang": 6,
+        "importance": "complementaire",
+        "indices": [
+          "bus",
+          "taxi",
+          "voiture personnelle"
+        ]
+      },
+      {
+        "fait": "Un parking est disponible à l'entrée principale.",
+        "rang": 7,
+        "importance": "complementaire",
+        "indices": [
+          "parking",
+          "disponible",
+          "entrée principale"
+        ]
+      },
+      {
+        "fait": "Attendre son tour dans la salle d’attente du service concerné.",
+        "rang": 8,
+        "importance": "complementaire",
+        "indices": [
+          "salle d’attente",
+          "service concerné",
+          "attendre"
+        ]
+      }
+    ]
+  },
+  {
+    "id": 20,
+    "question_wo": "Su ma amee xaalis bu néew, lan mooy ay possibilité yi ngir jot ci soins ci ospitaal?",
+    "question_fr": "Si j'ai un revenu limité, quelles sont les possibilités d'accéder aux soins médicaux à l'hôpital?",
+    "repondable": true,
+    "reponse": "Vous pouvez bénéficier d’une prise en charge partielle grâce à la carte de couverture maladie, qui réduit le coût des soins. La couverture maladie universelle ou une mutuelle locale permet également de payer une partie des frais. De plus, certains soins, notamment ceux destinés aux enfants de moins de cinq ans, sont gratuits et pris en charge par l’État. Il est conseillé de demander le tarif à l’accueil avant les soins pour connaître le montant exact.",
+    "motif": "",
+    "chunks_ids": [
+      "doc-b42e365cd1e33b90",
+      "doc-2dea26ea91d39dbd",
+      "doc-e4c868112f776a65",
+      "doc-1c1fa0efb7163618"
+    ],
+    "chunks_numeros": [
+      5,
+      12,
+      13,
+      30
+    ],
+    "valide": false,
+    "faits": [
+      {
+        "fait": "La carte de couverture maladie permet une prise en charge partielle des soins.",
+        "rang": 1,
+        "importance": "essentiel",
+        "indices": [
+          "carte",
+          "couverture",
+          "partielle"
+        ]
+      },
+      {
+        "fait": "La couverture maladie universelle ou une mutuelle locale permettent de payer une partie des frais.",
+        "rang": 2,
+        "importance": "essentiel",
+        "indices": [
+          "universelle",
+          "mutuelle locale"
+        ]
+      },
+      {
+        "fait": "Il faut demander le tarif à l’accueil avant les soins pour connaître le montant exact.",
+        "rang": 3,
+        "importance": "essentiel",
+        "indices": [
+          "demander",
+          "tarif",
+          "accueil"
+        ]
+      },
+      {
+        "fait": "Les soins destinés aux enfants de moins de cinq ans sont gratuits et pris en charge par l’État.",
+        "rang": 4,
+        "importance": "complementaire",
+        "indices": [
+          "enfants",
+          "cinq ans",
+          "gratuits"
+        ]
+      }
+    ]
+  }
+]

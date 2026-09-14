@@ -1,0 +1,86 @@
+11:44:19.285  INFO    ----  error        Started server process [38054]
+11:44:19.286  INFO    ----  error        Waiting for application startup.
+11:44:19.286  INFO    ----  serveur      préchargement des modèles au démarrage
+11:44:19.303  INFO    ----  warmup       torch 2.11.0 — cuda=False mps=True → auto=mps (DEVICE=auto)
+11:44:21.639  INFO    ----  device       embedder → MPS (auto)
+11:44:21.639  INFO    ----  vectorstore  Chargement embedder (sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) sur MPS...
+11:44:27.073  INFO    ----  warmup       embedder     prêt en 7770 ms
+11:44:27.202  INFO    ----  warmup       corpus/bm25  prêt en 129 ms
+11:44:27.481  INFO    ----  warmup       intent       prêt en 279 ms
+11:44:27.481  INFO    ----  device       reranker → MPS (auto)
+11:44:27.481  INFO    ----  reranker     Chargement (cross-encoder/ms-marco-MiniLM-L-6-v2) sur MPS...
+11:44:31.840  INFO    ----  reranker     Chargé.
+11:44:31.840  INFO    ----  warmup       reranker     prêt en 4359 ms
+11:44:31.840  INFO    ----  device       nllb → MPS (auto)
+11:44:31.840  INFO    ----  nllb         Chargement (bilalfaye/nllb-200-distilled-600M-wo-fr-en) sur MPS...
+11:44:44.490  INFO    ----  nllb         Chargé.
+11:44:44.490  INFO    ----  warmup       nllb         prêt en 12650 ms
+11:44:44.516  INFO    ----  stt          Chargement depuis dossier local : ./src/stt_wolof-hubert-ctc
+11:44:44.591  INFO    ----  device       stt → MPS (auto)
+11:44:45.019  INFO    ----  stt          Modèle prêt (./src/stt_wolof-hubert-ctc).
+11:44:45.019  INFO    ----  warmup       stt/wo       prêt en 529 ms
+11:44:45.050  INFO    ----  tts          Chargement Oolel-Voices depuis /Users/User/.cache/huggingface/hub/models--soynade-research--Oolel-Voices/snapshots/fb8a693e0d86e00672a04810cc5f331789cc0fb4...
+11:44:45.056  INFO    ----  device       tts → MPS (auto)
+11:45:06.406  INFO    ----  root         input frame rate=25
+11:45:11.619  INFO    ----  tts          Attention optimisée (SDPA) rétablie sur le décodeur T3
+11:45:11.620  INFO    ----  tts          Vocodeur accéléré : 4 itérations (au lieu de 10)
+11:45:11.620  INFO    ----  tts          Voice prompt : /Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/8_1_c.wav
+11:45:16.102  INFO    ----  tts          Identité vocale préparée (4.5s)
+11:45:16.103  INFO    ----  tts          Oolel-Voices prêt.
+11:45:41.976  INFO    ----  t3           ✅ EOS token detected! Stopping generation at step 250
+11:45:50.446  INFO    ----  tts          Moteur préchauffé (34.3s)
+11:45:50.447  INFO    ----  warmup       tts          prêt en 65430 ms
+11:45:50.451  INFO    ----  serveur      warm-up terminé en 91.2 s
+11:45:50.453  INFO    ----  serveur      prêt sur 0.0.0.0:8008
+11:45:50.454  INFO    ----  error        Application startup complete.
+11:45:50.457  INFO    ----  error        Uvicorn running on http://0.0.0.0:8008 (Press CTRL+C to quit)
+11:46:11.549  INFO    ----  access       127.0.0.1:54115 - "GET / HTTP/1.1" 200
+11:46:11.629  INFO    ----  access       127.0.0.1:54115 - "GET /health HTTP/1.1" 200
+11:46:24.529  INFO    ----  access       127.0.0.1:54117 - "POST /ask HTTP/1.1" 200
+11:46:24.531  INFO    c3c6  requete      question (30 car.) · provider=groq · tts=False · langue=à détecter
+11:46:29.448  INFO    c3c6  pipeline     procedure · 223 car. · total=4916 ms   intent=2044  recher=1111  llm=1661
+11:46:29.448  INFO    c3c6  requete      terminée en 4.9 s
+11:47:22.371  INFO    ----  access       127.0.0.1:54121 - "POST /ask HTTP/1.1" 200
+11:47:22.372  INFO    0774  requete      question (24 car.) · provider=groq · tts=False · langue=à détecter
+11:47:24.835  ERROR   0774  requete      échec après 2.5 s : Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199333, Requested 1075. Please try again in 2m56.256s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/app.py", line 231, in run
+    result = pipeline_answer(
+        question,
+    ...<7 lines>...
+        history       = history,
+    )
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/src/pipeline.py", line 389, in answer
+    response_fr = generate(question_fr, context_fr, provider=provider,
+                           plain=(lang == "wo"), history=history)
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/src/intent/../retrieval/../generation/llm.py", line 300, in generate
+    return _groq_generate(question_fr, context_fr, plain=plain, history=history)
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/src/intent/../retrieval/../generation/llm.py", line 130, in _groq_generate
+    completion = client.chat.completions.create(
+        model=settings.GROQ_MODEL,
+    ...<6 lines>...
+        max_tokens=settings.LLM_MAX_TOKENS,
+    )
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/venv/lib/python3.13/site-packages/groq/resources/chat/completions.py", line 466, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/openai/v1/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<45 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/venv/lib/python3.13/site-packages/groq/_base_client.py", line 1284, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/Desktop/TontumaBot_RAG1/TontumaBot_RAG1_V3/venv/lib/python3.13/site-packages/groq/_base_client.py", line 1071, in request
+    raise self._make_status_error_from_response(err.response) from None
+groq.RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199333, Requested 1075. Please try again in 2m56.256s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+11:48:04.655  INFO    ----  access       127.0.0.1:54125 - "GET / HTTP/1.1" 200
+11:48:04.683  INFO    ----  access       127.0.0.1:54125 - "GET /health HTTP/1.1" 200
+11:48:08.095  INFO    ----  error        Shutting down
+11:48:08.198  INFO    ----  error        Waiting for application shutdown.
+11:48:08.199  INFO    ----  serveur      arrêt du serveur
+11:48:08.200  INFO    ----  error        Application shutdown complete.
+11:48:08.201  INFO    ----  error        Finished server process [38054]

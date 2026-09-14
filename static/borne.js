@@ -591,7 +591,13 @@ window.Borne = (function () {
     translate_out: '🔄 Traduction français → wolof…',
     tts:           '🔊 Synthèse vocale…',
     tts_chunk:     '🔊 Synthèse vocale…',
+    // Les alertes ne sont pas des étapes de travail : sans libellé, leur nom
+    // brut s'afficherait à la place de l'étape en cours.
+    alerte_langue:  '⚠️ Langue annoncée douteuse…',
+    alerte_nombres: '⚠️ Contrôle des nombres…',
   };
+
+  const NOM_LANGUE = { wo: 'wolof', fr: 'français' };
 
   // ═══════════════════════════════════════════════════════════════════
   //  Progression du pipeline
@@ -705,6 +711,27 @@ window.Borne = (function () {
   function updateThinking(step, data) {
     if (step === 'stt' && data && data.lang) step = 'stt_' + data.lang;
     progresEtape(step, data);
+
+    // Erreur de bouton : l'usager a appuyé sur une langue et parlé dans
+    // l'autre. La transcription est déjà faite par le mauvais moteur et rien
+    // ne peut plus la rattraper — mais la réponse va paraître absurde, et
+    // l'avis dit pourquoi. Il reste dans le fil, contrairement au libellé
+    // d'étape qui défile.
+    if (step === 'alerte_langue' && data) {
+      const d = document.createElement('div');
+      d.className = 'sysmsg alerte';
+      d.innerHTML = '⚠️ Vous avez appuyé sur <b>' +
+        esc((NOM_LANGUE[data.declaree] || data.declaree).toUpperCase()) +
+        '</b> mais vous semblez avoir parlé <b>' +
+        esc(NOM_LANGUE[data.detectee] || data.detectee) +
+        '</b>. La réponse risque d’être à côté — réessayez avec l’autre bouton.';
+      if (bulleReponse && bulleReponse.parentNode === convo) {
+        convo.insertBefore(d, bulleReponse);
+      } else {
+        convo.appendChild(d);
+      }
+      scrollBas();
+    }
 
     let label = STEP_LABELS[step] || esc(step);
     if (step === 'tts_chunk' && data && data.total > 1) {

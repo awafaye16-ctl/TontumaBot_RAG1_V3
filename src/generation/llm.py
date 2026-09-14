@@ -15,6 +15,10 @@ abstention explicite si l'information est absente.
 import re
 from config import settings
 
+from journal import journal
+
+_log = journal("llm")
+
 # La réponse est lue à voix haute par la borne. Mesuré : la synthèse coûte
 # environ deux secondes par seconde d'audio, soit ~0,14 s par caractère — une
 # réponse de 900 caractères fait attendre deux minutes. La consigne de longueur
@@ -139,7 +143,7 @@ def _groq_generate(question_fr: str, context_fr: str, plain: bool = False,
     texte = _strip_think(raw)
 
     if getattr(choix, "finish_reason", None) == "length":
-        print(f"[llm] réponse coupée au plafond de {settings.LLM_MAX_TOKENS} jetons")
+        _log.warning(f"réponse coupée au plafond de {settings.LLM_MAX_TOKENS} jetons")
         texte = _finir_sur_phrase(texte)
 
     # Un modèle à raisonnement peut consommer tout le budget avant d'écrire un
@@ -147,9 +151,9 @@ def _groq_generate(question_fr: str, context_fr: str, plain: bool = False,
     # pire des cas — la borne se tairait sans rien afficher. On le signale, et
     # on sert le passage le plus pertinent plutôt que le silence.
     if not texte.strip():
-        print(f"[llm] réponse vide — le plafond de {settings.LLM_MAX_TOKENS} jetons "
-              f"est trop bas pour ce modèle (sa trace de raisonnement y est "
-              f"comptée). Repli sur le contexte.")
+        _log.error("réponse vide — le plafond de %d jetons est trop bas pour ce "
+                   "modèle (sa trace de raisonnement y est comptée). "
+                   "Repli sur le contexte.", settings.LLM_MAX_TOKENS)
         return _fallback(question_fr, context_fr)
     return texte
 
@@ -171,7 +175,7 @@ def _gemini_generate(question_fr: str, context_fr: str, plain: bool = False,
     # Gemini expose la raison d'arrêt par candidat ; MAX_TOKENS vaut 2.
     try:
         if reponse.candidates and int(reponse.candidates[0].finish_reason) == 2:
-            print("[llm] réponse coupée au plafond de jetons — dernière phrase retirée")
+            _log.warning("réponse coupée au plafond de jetons — dernière phrase retirée")
             texte = _finir_sur_phrase(texte)
     except Exception:
         pass          # une raison d'arrêt illisible ne doit pas perdre la réponse
@@ -215,24 +219,22 @@ def _load_local_model():
         # device_map="auto" répartit les couches (accelerate) : utile en multi-GPU
         # comme en délestage CPU quand la VRAM ne suffit pas.
         kwargs["device_map"] = "auto"
-        print(f"[LLM] Chargement local ({model_id}, {quant}) sur CUDA...")
+        _log.info(f"Chargement local ({model_id}, {quant}) sur CUDA...")
     else:
         if quant in ("4bit", "8bit"):
-            print(f"[LLM] {quant} ignoré : bitsandbytes exige CUDA, "
-                  f"backend détecté = {backend.upper()}.")
+            _log.warning("%s ignoré : bitsandbytes exige CUDA, backend "
+                         "détecté = %s.", quant, backend.upper())
         # fp16 sur MPS (Metal gère la demi-précision et divise la mémoire par
         # deux) ; fp32 sur CPU, où le fp16 est émulé donc plus lent.
         kwargs["torch_dtype"] = torch.float16 if backend == "mps" else torch.float32
         kwargs["device_map"]  = backend
-        print(f"[LLM] Chargement local ({model_id}, sans quantification) "
-              f"sur {backend.upper()} — prévoir beaucoup de RAM.")
+        _log.warning("chargement local (%s, sans quantification) sur %s — "
+                     "prévoir beaucoup de RAM.", model_id, backend.upper())
 
     _local_tokenizer = AutoTokenizer.from_pretrained(model_id)
     _local_model     = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
     _local_ready = True
-    print("[LLM] Modèle local prêt.")
-
-
+    _log.info("Modèle local prêt.")
 def _local_generate(question_fr: str, context_fr: str, plain: bool = False,
                     history=None) -> str:
     import torch

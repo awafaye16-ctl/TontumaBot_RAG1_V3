@@ -120,3 +120,50 @@ def detect_language(text: str) -> str:
     """'wo' ou 'fr'. Le français reste le repli quand rien ne tranche."""
     s = scores(text)
     return "wo" if s["wolof"] > s["francais"] else "fr"
+
+
+# ── Contrôle d'une langue déclarée ────────────────────────────────────────
+#  Sur le chemin vocal, la langue n'est pas détectée mais annoncée : bouton de
+#  la borne, sélecteur du chat. Elle choisit le moteur STT avant même qu'il y
+#  ait un texte, et rien en aval ne la remet en cause. Un usager qui se trompe
+#  de bouton obtient donc une transcription par le mauvais moteur, puis une
+#  réponse dans la mauvaise langue, sans que rien ne le signale.
+#
+#  Ce contrôle ne corrige pas — il ne peut pas : le mal est fait au moment de
+#  la transcription. Il rend l'erreur visible.
+#
+#  Le seuil existe parce que `detect_language` retombe sur 'fr' quand rien ne
+#  tranche : sans lui, « Waaw. » déclarée en wolof lèverait une alerte à chaque
+#  fois. On exige donc un signal net — le gagnant doit marquer au moins
+#  _SEUIL_ALERTE points ET doubler le perdant. À titre de repère, un seul mot
+#  wolof reconnu vaut 3 points et un mot français 2.
+_SEUIL_ALERTE = 6
+
+
+def contredit(declaree: str, text: str) -> dict | None:
+    """La transcription contredit-elle la langue annoncée ?
+
+    Retourne None si tout concorde ou si le signal est trop faible pour
+    conclure ; sinon un bilan {declaree, detectee, scores} destiné à la trace
+    et à l'affichage.
+    """
+    declaree = (declaree or "").lower()[:2]
+    if declaree not in ("wo", "fr"):
+        return None
+
+    s = scores(text)
+    gagnant, perdant = ("wo", "fr") if s["wolof"] > s["francais"] else ("fr", "wo")
+    haut = max(s["wolof"], s["francais"])
+    bas  = min(s["wolof"], s["francais"])
+
+    if gagnant == declaree:
+        return None
+    if haut < _SEUIL_ALERTE or haut < bas * 2:
+        return None
+
+    return {
+        "declaree": declaree,
+        "detectee": gagnant,
+        "scores":   {"wolof": s["wolof"], "francais": s["francais"],
+                     "n_mots": s["n_mots"]},
+    }

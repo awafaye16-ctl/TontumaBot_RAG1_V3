@@ -40,13 +40,17 @@ from io import BytesIO
 from typing import Callable, Optional
 
 import vectorstore
-from language.detector import detect_language
+from language.detector import detect_language, contredit
 from translation.nllb import wolof_to_french, french_to_wolof
 from translation.nombres import en_chiffres, realigner, verifier_nombres
 from translation.prononciation import pour_synthese
 from intent.router import detect_intent
 from retrieval.reranker import rerank
 from generation.llm import generate
+
+from journal import journal
+
+_log = journal("pipeline")
 
 try:
     import qrcode
@@ -216,13 +220,18 @@ def _rag_pipeline(
         "latency_rerank_ms":  t_rerank,
         "latency_total_ms":   round((time.perf_counter() - t0) * 1000, 1),
         "reranker_scores":    [round(s, 4) for _, s, _ in reranked],
+        # L'identifiant du fragment voyage avec le texte : sans lui, impossible
+        # de dire APRÈS COUP quel passage du corpus a nourri une réponse — ni de
+        # confronter la recherche à un jeu d'évaluation. `rerank` renvoie
+        # l'index d'origine dans `mmr_texts`, d'où le détour par `mmr_results`.
         "chunks": [
             {
                 "rank":  i + 1,
+                "id":    mmr_results[idx][0],
                 "score": round(s, 4),
                 "text":  doc[:200] + ("…" if len(doc) > 200 else ""),
             }
-            for i, (_, s, doc) in enumerate(reranked)
+            for i, (idx, s, doc) in enumerate(reranked)
         ],
     }
     return context_fr, retrieval_trace
@@ -274,11 +283,21 @@ def answer(
     trace   = {}
 
     def _emit(step: str, **info):
+        # Toute étape est journalisée, qu'un client écoute ou non le flux SSE.
+        # C'est la progression en temps réel : quand une requête semble figée,
+        # c'est cette ligne qui dit à quelle étape elle l'est.
+        _log.debug("→ %s%s", step,
+                   " " + " ".join(f"{c}={v}" for c, v in info.items()
+                                  if c not in ("response", "response_fr", "response_wo"))
+                   if info else "")
         if progress:
             try:
                 progress(step, info)
-            except Exception:
-                pass
+            except Exception as e:
+                # Un client qui ferme sa connexion ne doit pas faire tomber le
+                # pipeline, mais l'avaler en silence cacherait une vraie panne.
+                _log.debug("callback de progression refusé (%s) — étape %s",
+                           type(e).__name__, step)
 
     # ── 1. Langue d'entrée ────────────────────────────────────────────────
     # L'indice prime sur la détection : quand l'usager a appuyé sur « Wolof »
@@ -292,6 +311,22 @@ def answer(
     trace["input_lang"]        = lang
     trace["input_lang_source"] = lang_source
     _emit("detect", lang=lang, source=lang_source)
+
+    # La langue déclarée choisit le moteur STT avant qu'il y ait un texte, et
+    # plus rien ne la remet en cause ensuite : un usager qui se trompe de bouton
+    # obtient une transcription par le mauvais moteur, puis une réponse dans la
+    # mauvaise langue, en silence. On ne peut pas corriger — le mal est fait à la
+    # transcription — mais on peut le dire.
+    if lang_source == "indice":
+        conflit = contredit(lang, unified_text)
+        if conflit:
+            trace["alerte_langue"] = conflit
+            _emit("alerte_langue", **conflit)
+            _log.warning("langue déclarée « %s » mais la transcription ressemble "
+                         "à « %s » (wolof=%s, français=%s) — texte : %s",
+                         conflit["declaree"], conflit["detectee"],
+                         conflit["scores"]["wolof"], conflit["scores"]["francais"],
+                         " ".join(unified_text.split())[:110])
 
     # ── 2. Traduction WO→FR si nécessaire ────────────────────────────────
     question_fr = unified_text
@@ -412,13 +447,15 @@ def answer(
             "realignement": recal,
         }
         if recal["corriges"]:
-            print(f"[nombres] réinjectés depuis le français : {recal['corriges']}")
+            _log.info(f"réinjectés depuis le français : {recal['corriges']}")
         if not controle["coherent"]:
             _emit("alerte_nombres", **controle)
-            print(f"[nombres] écart FR/WO — suspects={controle['suspects']} "
-                  f"ajoutés={controle['ajoutes']}\n"
-                  f"          fr: {response_fr_clean[:120]}\n"
-                  f"          wo: {response_wo[:120]}")
+            # Les extraits sont aplatis : un message de journal qui contient
+            # des retours à la ligne casse un `grep` et brouille la lecture.
+            _plat = lambda t: " ".join((t or "").split())[:110]
+            _log.warning("écart de nombres FR/WO — suspects=%s ajoutés=%s | "
+                         "fr: %s | wo: %s", controle["suspects"], controle["ajoutes"],
+                         _plat(response_fr_clean), _plat(response_wo))
 
     # ── 7. TTS (optionnel) ────────────────────────────────────────────────
     if tts:
@@ -465,6 +502,21 @@ def answer(
 
     # ── 8. Latence totale ─────────────────────────────────────────────────
     trace["total_latency_ms"] = round((time.perf_counter() - t_total) * 1000, 1)
+
+    # La répartition en une ligne. C'est elle qu'on lit quand « la borne est
+    # lente » : elle désigne le poste fautif sans avoir à ouvrir la trace JSON.
+    postes = [
+        ("wo→fr",  trace.get("wolof_to_french", {}).get("latency_ms")),
+        ("intent", trace.get("intent_latency_ms")),
+        ("recher", trace.get("retrieval", {}).get("latency_total_ms")),
+        ("llm",    trace.get("llm", {}).get("latency_ms")),
+        ("fr→wo",  trace.get("french_to_wolof", {}).get("latency_ms")),
+        ("tts",    trace.get("tts", {}).get("latency_ms")),
+    ]
+    detail = "  ".join(f"{nom}={ms:.0f}" for nom, ms in postes if ms)
+    _log.info("%s · %d car. · total=%.0f ms   %s",
+              trace.get("intent", "?"), len(response.get("response", "")),
+              trace["total_latency_ms"], detail)
 
     return response
 

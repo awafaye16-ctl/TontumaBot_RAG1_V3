@@ -19,6 +19,10 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import vectorstore  # noqa: E402
 
+from journal import journal
+
+_log = journal("ingestion")
+
 # ── Paramètres de chunking ────────────────────────────────────────────────
 CHUNK_SIZE    = 512   # caractères max par chunk
 CHUNK_OVERLAP = 80    # chevauchement pour conserver le contexte entre chunks
@@ -192,4 +196,4 @@ if __name__ == "__main__":
     import sys as _sys
     for p in _sys.argv[1:]:
         n = ingest_file(p)
-        print(f"{p} → {n} chunks indexés")
+        _log.info(f"{p} → {n} chunks indexés")

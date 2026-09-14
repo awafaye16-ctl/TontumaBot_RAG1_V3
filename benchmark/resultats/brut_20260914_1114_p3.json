@@ -1,0 +1,581 @@
+{
+  "configuration": {
+    "horodatage": "2026-09-14T11:11:41",
+    "commit": "9acb635",
+    "arbre_propre": false,
+    "machine": "Darwin arm64",
+    "backends": {
+      "torch": "2.11.0",
+      "auto": "mps",
+      "cuda": false,
+      "mps": true,
+      "override": "auto",
+      "par_composant": {}
+    },
+    "llm_provider": "groq",
+    "llm_modele": "openai/gpt-oss-120b",
+    "llm_max_phrases": 3,
+    "llm_max_tokens": 800,
+    "reranker_top_k": 5,
+    "tts_n_steps": 4,
+    "tts_chunk_chars": 200,
+    "n_chunks_indexes": 32
+  },
+  "avec_tts": false,
+  "repetitions": 3,
+  "prechauffage": true,
+  "resultats": [
+    {
+      "id": 1,
+      "repetition": 1,
+      "question_wo": "Naka la mën a jëme ci ospitaal bi ngir gis doktoor?",
+      "question_fr": "Comment peut-il aller à l'hôpital pour voir un médecin?",
+      "response_fr": "L'hôpital de Fann se situe dans le quartier de Fann, près de l'université. Le patient peut s'y rendre en bus, en taxi ou en voiture personnelle et stationner au parking de l'entrée principale. Il accède à la consultation via l'entrée principale de l'hôpital.",
+      "response_wo": "Hopitaal bu Fann mingi nekk ci diwaanu Fann ci wetu iniwersite bi. Malaad bi mën na dem foofu ci bus, taksi wala oto boppam te gaare ci gaaraasu buntu bu mag bi. Dafay jaar ci buntu bu mag bi ci hopitaal bi ngir am paj mu yaatu.",
+      "chunks": [
+        "doc-b1dfae6b327c36bd",
+        "doc-b9f709b4484117d7",
+        "doc-f4edce21c4aa2bef"
+      ],
+      "scores": [
+        5.261,
+        3.8756,
+        3.0917
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 8.0,
+      "latences_ms": {
+        "wo_fr": 1413.7,
+        "intent": 21.2,
+        "retrieval": 140.0,
+        "rerank": 138.7,
+        "llm": 2461.4,
+        "fr_wo": 3918.3,
+        "tts": null,
+        "total": 8004.5
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 2,
+      "repetition": 1,
+      "question_wo": "Lan laa war a def bu ma bëggee def rendez-vous ci ospitaal?",
+      "question_fr": "Que dois-je faire pour prendre un rendez-vous à l'hôpital?",
+      "response_fr": "Rendez‑vous au bureau des rendez‑vous à l’accueil de l’hôpital ou appelez le numéro d’accueil pour réserver une date. Arrivez au moins trente minutes avant l’heure fixée le jour du rendez‑vous.",
+      "response_wo": "Dellool sa bopp ci biro biy dalal nit ñi ci dalal bu lopitaal bi wala nga woo nimero dalal nit ñi ngir jàpp ab waxtu. Ñëwal gën gaa néew fan-weeri simili balaa waxtu wi war ci bés bi nga dajee.",
+      "chunks": [
+        "doc-b10b722dc095f1ad",
+        "doc-f4edce21c4aa2bef",
+        "doc-b1dfae6b327c36bd"
+      ],
+      "scores": [
+        3.7863,
+        -0.5582,
+        -3.1067
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 1,
+        "suspects": [
+          {
+            "valeur": 30,
+            "montant": false
+          }
+        ],
+        "ajoutes": [],
+        "coherent": false
+      },
+      "duree_s": 6.59,
+      "latences_ms": {
+        "wo_fr": 1486.0,
+        "intent": 44.5,
+        "retrieval": 97.8,
+        "rerank": 96.8,
+        "llm": 1061.6,
+        "fr_wo": 3866.2,
+        "tts": null,
+        "total": 6592.9
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out",
+        "alerte_nombres"
+      ]
+    },
+    {
+      "id": 3,
+      "repetition": 1,
+      "question_wo": "Naka laa mën a gis service urgences bi?",
+      "question_fr": "Comment je peux trouver le service d'urgence?",
+      "response_fr": "Rendez‑vous à l’hôpital de Fann, quartier de Fann, et utilisez la seconde entrée réservée aux urgences. Le service fonctionne jour et nuit, week‑ends et jours fériés, sans besoin de rendez‑vous ni de lettre de référence. Si vous ne pouvez pas vous y rendre, appelez le service d’assistance médicale d’urgence qui enverra une ambulance sur le lieu indiqué.",
+      "response_wo": "Delloosi sa bopp lopitaalu Fan, ci diwaanu Fan, nga jëfandikoo ñaareelu buntu bi nga teg ngir paj yi. Sarwiis baa ngi dox guddi ak bëccëg, ci njeexte ayu-bés yi ak ci bëccëg yi, soxla wuñu ab ndaje wala bataaxal. Su fekkee ne mënoo fa dem, wooteel bérébu fajukaay biy yónnee ambulaas béréb bi nga tànn.",
+      "chunks": [
+        "doc-b1dfae6b327c36bd",
+        "doc-a7891ab61ea7ea3d",
+        "doc-e535efee18272fbc"
+      ],
+      "scores": [
+        4.7114,
+        3.1704,
+        2.2873
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 9.63,
+      "latences_ms": {
+        "wo_fr": 994.6,
+        "intent": 59.6,
+        "retrieval": 108.4,
+        "rerank": 107.5,
+        "llm": 1327.1,
+        "fr_wo": 7078.0,
+        "tts": null,
+        "total": 9627.3
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 4,
+      "repetition": 1,
+      "question_wo": "Ana ban service laa war a dem bu ma amee feebar bu metti?",
+      "question_fr": "Et à quel service dois-je m'adresser si je suis sévèrement malade?",
+      "response_fr": "Appelez le service d’assistance médicale d’urgence, indiquez le lieu exact et la nature du problème. Restez calme et attendez l’arrivée de l’ambulance sans administrer de médicament.",
+      "response_wo": "Woowal fajtatu jafe-jafe yi, nga wax fi jafe-jafe bi féeteek nature bi. Toogal bu baax te xaaral ambulaas te nga joxewul benn garab.",
+      "chunks": [
+        "doc-ea2d1c9bd3edba49",
+        "doc-e535efee18272fbc",
+        "doc-2dea26ea91d39dbd"
+      ],
+      "scores": [
+        -5.7966,
+        -6.1206,
+        -7.186
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 6.7,
+      "latences_ms": {
+        "wo_fr": 1679.9,
+        "intent": 95.7,
+        "retrieval": 103.4,
+        "rerank": 101.5,
+        "llm": 1486.2,
+        "fr_wo": 3299.3,
+        "tts": null,
+        "total": 6704.3
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 5,
+      "repetition": 1,
+      "question_wo": "Lan mooy ay procédure ngir def examen ci ospitaal?",
+      "question_fr": "Quelles sont les procédures pour un examen hospitalier?",
+      "response_fr": "Arriver au service des consultations externes du lundi au vendredi avec le passeport, la carte de couverture maladie, le carnet de santé pour un enfant, la lettre de référence et les anciens résultats d’examens si vous les avez. Le médecin écoute vos plaintes, vous examine et, si nécessaire, prescrit des examens complémentaires (analyse de sang, radiographie ou échographie). Il vous remet ensuite l’ordonnance que vous achetez à la pharmacie et suivez les doses indiquées.",
+      "response_wo": "Ñëwal ci bérébu fajukaay bi altine ba aljuma ak paaspoor bi, kàrtu feebar bi, téereb wér-gi-yarami xale bi, bataaxal bi ñu koy bindoo ak njuréefi examen yi njëkk, su fekkee ne am nga leen. Fajkat bi dafay déglu seeni plainte, saytu leen, te su ko jaree dafay bind yeneen examen yi (saytu deret ji, radiografi wala ekograafi). Su ko defee mu lay jox ordonaas bi ngay jënd ci farmasi bi nga topp dose yi ñu la digal.",
+      "chunks": [
+        "doc-56eed92070de4cbb",
+        "doc-b42e365cd1e33b90",
+        "doc-c1bbf8f780cada52"
+      ],
+      "scores": [
+        2.2344,
+        -1.066,
+        -4.6943
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 13.51,
+      "latences_ms": {
+        "wo_fr": 1386.0,
+        "intent": 47.7,
+        "retrieval": 91.2,
+        "rerank": 89.8,
+        "llm": 1055.9,
+        "fr_wo": 10858.2,
+        "tts": null,
+        "total": 13505.0
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 6,
+      "repetition": 1,
+      "question_wo": "Naka laa mën a jëfandikoo assurance maladie ci ospitaal?",
+      "question_fr": "Comment puis-je faire appel à une assurance maladie hospitalière?",
+      "response_fr": "Présentez votre carte de couverture maladie à l’accueil de l’hôpital avant de commencer les soins. Demandez le tarif au guichet afin que la carte réduise la somme à payer. Le personnel vérifiera votre droit à la prise en charge et appliquera la réduction.",
+      "response_wo": "Teewal sa kàrta biy wane feebar bi ca fa mbaxana ba nga tàmbalee fa paj mi. Laajteel njëg bi ci njënd mi ngir kàrt bi wàññi xaalis bi war. Ndaw yi dina ñu saytu sa yelleefu toppatoo ba noppi jëfandikoo wàññig gi.",
+      "chunks": [
+        "doc-e535efee18272fbc",
+        "doc-1c1fa0efb7163618",
+        "doc-b9f709b4484117d7"
+      ],
+      "scores": [
+        -3.5787,
+        -5.1906,
+        -7.8714
+      ],
+      "intent": "procedure",
+      "alerte_langue": null,
+      "nombres": {
+        "controles": 0,
+        "suspects": [],
+        "ajoutes": [],
+        "coherent": true
+      },
+      "duree_s": 7.19,
+      "latences_ms": {
+        "wo_fr": 1637.7,
+        "intent": 40.7,
+        "retrieval": 159.4,
+        "rerank": 157.2,
+        "llm": 1285.5,
+        "fr_wo": 4026.9,
+        "tts": null,
+        "total": 7194.9
+      },
+      "tts": null,
+      "etapes": [
+        "detect",
+        "translate_in",
+        "intent",
+        "retrieval",
+        "llm",
+        "translate_out"
+      ]
+    },
+    {
+      "id": 7,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199398, Requested 1212. Please try again in 4m23.52s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 8,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199394, Requested 1430. Please try again in 5m55.968s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 9,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199389, Requested 1219. Please try again in 4m22.656s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 10,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199385, Requested 1450. Please try again in 6m0.72s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 11,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199382, Requested 1222. Please try again in 4m20.928s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 12,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199379, Requested 1187. Please try again in 4m4.512s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 13,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199376, Requested 1457. Please try again in 5m59.856s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 14,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199372, Requested 1204. Please try again in 4m8.832s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 15,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199369, Requested 1209. Please try again in 4m9.696s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 16,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199366, Requested 1441. Please try again in 5m48.624s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 17,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199362, Requested 1220. Please try again in 4m11.423999999s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 18,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199358, Requested 1218. Please try again in 4m8.832s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 19,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199354, Requested 1107. Please try again in 3m19.152s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 20,
+      "repetition": 1,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199347, Requested 1241. Please try again in 4m14.016s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 1,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199342, Requested 1457. Please try again in 5m45.168s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 2,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199338, Requested 1444. Please try again in 5m37.824s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 3,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199335, Requested 1244. Please try again in 4m10.128s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 4,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199331, Requested 1468. Please try again in 5m45.168s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 5,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199328, Requested 1192. Please try again in 3m44.64s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 6,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199324, Requested 1226. Please try again in 3m57.6s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 7,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199321, Requested 1453. Please try again in 5m34.368s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 8,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199317, Requested 1189. Please try again in 3m38.592s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 9,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199312, Requested 1219. Please try again in 3m49.392s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 10,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199308, Requested 1450. Please try again in 5m27.456s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 11,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199305, Requested 1222. Please try again in 3m47.664s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 12,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199302, Requested 1187. Please try again in 3m31.248s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 13,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199299, Requested 1457. Please try again in 5m26.592s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 14,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199295, Requested 1204. Please try again in 3m35.567999999s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 15,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199292, Requested 1209. Please try again in 3m36.432s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 16,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199288, Requested 1200. Please try again in 3m30.816s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 17,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199284, Requested 1220. Please try again in 3m37.728s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 18,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199281, Requested 1459. Please try again in 5m19.68s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 19,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199277, Requested 1204. Please try again in 3m27.792s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 20,
+      "repetition": 2,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199270, Requested 1241. Please try again in 3m40.752s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 1,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199267, Requested 1457. Please try again in 5m12.768s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 2,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199261, Requested 1203. Please try again in 3m20.448s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 3,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199258, Requested 1244. Please try again in 3m36.864s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 4,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199253, Requested 1468. Please try again in 5m11.472s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 5,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199249, Requested 1192. Please try again in 3m10.512s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 6,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199246, Requested 1226. Please try again in 3m23.904s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 7,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199242, Requested 1453. Please try again in 5m0.24s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 8,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199239, Requested 1189. Please try again in 3m4.896s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 9,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199235, Requested 1219. Please try again in 3m16.128s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 10,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199228, Requested 1098. Please try again in 2m20.832s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 11,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199225, Requested 1222. Please try again in 3m13.104s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 12,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199222, Requested 1187. Please try again in 2m56.688s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 13,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199218, Requested 1105. Please try again in 2m19.536s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 14,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199215, Requested 1204. Please try again in 3m1.008s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 15,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199212, Requested 1209. Please try again in 3m1.872s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 16,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199209, Requested 1441. Please try again in 4m40.8s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 17,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199205, Requested 1220. Please try again in 3m3.6s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 18,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199202, Requested 1218. Please try again in 3m1.44s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 19,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199198, Requested 1445. Please try again in 4m37.776s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    },
+    {
+      "id": 20,
+      "repetition": 3,
+      "echec": "RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kktbrq5wf1bapetx1y0rf4vm` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199191, Requested 1241. Please try again in 3m6.624s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}"
+    }
+  ]
+}

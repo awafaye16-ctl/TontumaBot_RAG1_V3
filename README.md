@@ -241,197 +241,55 @@ dossier vide.
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| `GET`   | `/` | Interface web |
-| `GET`   | `/health` | État du service |
-| `POST`  | `/ask` | Question texte → réponse **SSE** (voir plus bas) |
-| `POST`  | `/ask/audio` | Audio → STT → Pipeline → réponse **SSE** |
-| `GET`   | `/static/{fichier}.wav` | Récupérer un audio TTS généré (via `audio_url`) |
-| `POST`  | `/admin/documents` | Ingérer document (TXT/MD/PDF) |
-| `GET`   | `/admin/documents` | Lister documents indexés |
+| `GET`   | `/` · `/borne` · `/borne/simple` · `/admin` | Pages servies |
+| `GET`   | `/health` | État du service, backends et mémoire |
+| `POST`  | `/ask` | Question texte → réponse **SSE** |
+| `POST`  | `/ask/audio` | Audio → STT → pipeline → réponse **SSE** |
+| `GET`   | `/session/{id}` | État de la mémoire conversationnelle |
+| `POST`  | `/session/{id}/reset` | Vider l'historique, garder la session |
+| `DELETE`| `/session/{id}` | Oublier la session |
+| `GET`   | `/static/{fichier}.wav` | Audio produit (via `audio_url`) |
+| `POST`  | `/admin/documents` | Ingérer un document (TXT/MD/PDF) |
+| `GET`   | `/admin/documents` | Lister les documents indexés |
 | `DELETE`| `/admin/documents/{id}` | Supprimer un document |
-| `POST`  | `/translate` | Test traduction NLLB |
-| `POST`  | `/eval/ragas` | Évaluation RAGAS |
+| `POST`  | `/admin/documents/clear` | **Tout effacer** |
+| `GET`   | `/translate` | Test de traduction NLLB, sans RAG |
+| `POST`  | `/eval/ragas` | Évaluation sur un jeu de test fourni |
 
-> `/ask` et `/ask/audio` répondent en **SSE** (`text/event-stream`), pas en JSON
-> d'un bloc. Voir la section **API SSE** ci-dessous pour le format des événements.
+> **Aucune authentification, CORS ouvert à `*`** — `/admin/*` compris. Quiconque
+> joint le service peut effacer la base documentaire. Le fichier `api.key` du
+> dépôt n'est lu par aucune route. En exposition réseau, protégez `/admin/*` en
+> amont ou n'exposez que `localhost`.
+
+Contrat complet dans **[`API.md`](API.md)**.
 
 ---
 
-## API SSE (streaming de la réponse)
+## API SSE
 
-Le modèle est **REST pour l'envoi** (`POST`) et **SSE (Server-Sent Events) pour la réponse**.
-`/ask` et `/ask/audio` renvoient un flux `text/event-stream` : la progression du
-pipeline est émise étape par étape, suivie du résultat final. Le WebSocket a été
-retiré au profit de ce modèle, plus simple à opérer et à faire passer les proxies.
+`POST /ask` et `POST /ask/audio` répondent en `text/event-stream`. Le contrat
+complet — événements, charges utiles, paramètres, clients d'exemple en
+JavaScript et en Java, codes d'erreur — est dans **[`API.md`](API.md)**.
 
-> L'audio TTS n'est **pas** envoyé dans le flux (SSE = texte). Le résultat contient
-> un champ `audio_url` pointant vers un fichier WAV servi sur `/static`, que le
-> client récupère par un simple `GET`.
+Il n'est pas repris ici : deux descriptions du même contrat finissent toujours
+par diverger, et c'est déjà arrivé sur ce projet.
 
-### Requête
+Ce qu'il faut en retenir côté conception :
 
-```
-POST /ask
-Content-Type: application/json
-
-{ "question": "Comment faire un passeport ?", "tts": true, "provider": "groq" }
-```
-
-| Champ | Type | Requis | Défaut | Description |
-|-------|------|--------|--------|-------------|
-| `question` | string | ✅ | — | Question en wolof ou français |
-| `tts` | boolean | ❌ | `false` | Générer l'audio TTS |
-| `provider` | string | ❌ | config | `groq` \| `gemini` \| `local` |
-
-### Flux d'événements
-
-Chaque événement suit le format SSE `event: <nom>\ndata: <json>\n\n`.
-
-**Statuts de progression** (`event: status`) :
-```
-event: status
-data: {"step": "start", "question": "...", "tts": true, "provider": "groq"}
-
-event: status
-data: {"step": "detect", "lang": "fr"}
-```
-
-Étapes possibles : `start` → (`stt`) → `detect` → (`translate_in`) → `intent` →
-`retrieval` → `llm` → (`translate_out`) → (`alerte_nombres`) → (`tts`) →
-(`tts_chunk` × N) → puis `result` → `done`.
-Les étapes entre parenthèses n'apparaissent que si pertinentes (audio, entrée wolof, TTS).
-
-**L'étape `tts` porte le texte de la réponse.** Le `result` n'arrive qu'une fois
-l'audio produit — jusqu'à deux minutes plus tard sur une réponse longue. Sans
-cela, la borne se mettrait à parler avant d'afficher ce qu'elle dit :
-
-```
-event: status
-data: {"step": "tts", "response": "Ngir mu mën a dem lopitaal bi...",
-       "response_fr": "Pour se rendre à l'hôpital...", "response_wo": "...",
-       "lang": "wo"}
-```
-
-**`tts_chunk` : la synthèse est diffusée morceau par morceau.** Chaque événement
-porte l'URL d'un fragment lisible immédiatement, dans l'ordre. Un client qui les
-enchaîne parle dès le premier ; ceux qui les ignorent attendent `audio_url` dans
-`result`, qui reste la réponse entière en un seul fichier.
-
-```
-event: status
-data: {"step": "tts_chunk", "index": 1, "total": 5,
-       "audio_url": "/static/response_3b5f134a_01.wav", "latency_ms": 37340.2}
-```
-
-Chronologie relevée sur une réponse en 5 morceaux : premier son disponible à
-37,3 s, dernier à 153,4 s. Une réponse courte tient en un seul morceau — `index`
-et `total` valent alors 1, et le fichier du morceau **est** le fichier final
-(aucun doublon n'est écrit).
-
-`latency_ms` est compté depuis le début de la synthèse, pas depuis le début de
-la requête.
-
-`alerte_nombres` n'est émis que si un nombre du français ne se retrouve pas dans
-la traduction wolof. NLLB réécrit parfois les montants de lui-même et se trompe
-(`1000 francs CFA` → `junniy dërëm`, soit 5000 F) ; la valeur d'origine étant
-alors perdue, le pipeline ne corrige pas mais signale :
-
-```
-event: status
-data: {"step": "alerte_nombres", "controles": 2,
-       "suspects": [{"valeur": 1000, "montant": true}], "ajoutes": [],
-       "coherent": false}
-```
-
-Le même bilan est repris dans `trace.french_to_wolof.nombres` de l'événement
-`result`, que l'alerte ait été levée ou non.
-
-**Résultat final** (`event: result`) :
-```
-event: result
-data: {
-  "response": "Pour obtenir un passeport...",
-  "response_fr": "Pour obtenir un passeport...",
-  "response_wo": "Baati passeport bi...",
-  "qr_code": "iVBORw0KGgo...",        // base64 PNG (procédures)
-  "audio_url": "/static/response_ab12cd34.wav",  // null si tts=false
-  "lang": "fr",
-  "memory": { "count": 4, "max": 10, "reset": false },
-  "trace": { "total_latency_ms": 1200, "tts": { "n_morceaux": 3, ... }, ... }
-}
-```
-
-**Erreur** (`event: error`) puis `event: done` :
-```
-event: error
-data: {"message": "..."}
-
-event: done
-data: {}
-```
-
-### Test en ligne de commande
+- **L'étape `tts` porte le texte de la réponse.** Le `result` n'arrive qu'une
+  fois l'audio produit, jusqu'à deux minutes plus tard sur une réponse longue —
+  sans cet événement, la borne parlerait avant d'afficher ce qu'elle dit.
+- **`tts_chunk` diffuse la synthèse morceau par morceau.** Le premier son est
+  disponible à 37 s là où l'énoncé complet demande 153 s. Les clients qui les
+  ignorent attendent simplement `audio_url` dans `result`.
+- **`alerte_langue` et `alerte_nombres` signalent sans corriger** : dans les deux
+  cas le mal est déjà fait en amont, et le pipeline préfère le dire que de le
+  taire.
 
 ```bash
 curl -N -X POST http://localhost:8008/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Comment faire un passeport ?", "tts": false, "provider": "groq"}'
-```
-
-### Client Java (Spring Boot / WebClient)
-
-`EventSource` natif ne fait que du `GET` ; pour un `POST` + SSE, on lit le flux
-directement (`WebClient` en Spring, ou `fetch` + `ReadableStream` côté navigateur).
-
-```java
-WebClient client = WebClient.create("http://localhost:8008");
-client.post().uri("/ask")
-    .contentType(MediaType.APPLICATION_JSON)
-    .bodyValue(Map.of("question", "Où déposer ma demande de CNI ?", "tts", true, "provider", "groq"))
-    .retrieve()
-    .bodyToFlux(ServerSentEvent.class)
-    .doOnNext(evt -> {
-        switch (evt.event()) {
-            case "status" -> log.info("étape: {}", evt.data());
-            case "result" -> {
-                JsonNode r = objectMapper.readTree((String) evt.data());
-                String reponse  = r.get("response").asText();
-                String audioUrl = r.get("audio_url").isNull() ? null : r.get("audio_url").asText();
-                // audioUrl → GET http://localhost:8008{audioUrl} pour récupérer le WAV
-            }
-            case "error" -> log.error("erreur: {}", evt.data());
-        }
-    })
-    .blockLast();
-```
-
-### Client JavaScript (navigateur, fetch + stream)
-
-```js
-const resp = await fetch('/ask', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ question: 'Comment créer une entreprise ?', tts: true, provider: 'groq' }),
-});
-
-const reader = resp.body.pipeThrough(new TextDecoderStream()).getReader();
-let buffer = '';
-for (;;) {
-  const { value, done } = await reader.read();
-  if (done) break;
-  buffer += value;
-  const events = buffer.split('\n\n');
-  buffer = events.pop();               // dernier fragment incomplet
-  for (const block of events) {
-    const ev  = block.match(/^event: (.*)$/m)?.[1];
-    const dat = JSON.parse(block.match(/^data: (.*)$/m)?.[1] || '{}');
-    if (ev === 'status')  console.log('étape', dat.step);
-    if (ev === 'result') {
-      console.log('réponse', dat.response);
-      if (dat.audio_url) new Audio(dat.audio_url).play();   // GET du WAV
-    }
-  }
-}
+  -d '{"question":"Comment faire un passeport ?","tts":false}'
 ```
 
 ---
@@ -445,6 +303,7 @@ Deux pages, servies par le même backend, avec des besoins différents.
 | Usage | la borne en service, tactile, avec micro | démo et mise au point |
 | Lecture audio | **enchaîne les morceaux** dès le premier | `<audio controls>` sur le fichier complet |
 | TTS demandé | sur les questions vocales uniquement | case à cocher, activée par défaut |
+| Langue de la dictée | deux boutons « appuyer pour parler » | sélecteur « Je parle… » |
 | Jauge de progression | trait sur la barre d'état | dans la bulle de traitement |
 | Trace du pipeline | non | oui, détaillée sous la réponse |
 
@@ -484,6 +343,62 @@ morceaux se vide donc en cours de route. La borne reste alors en état
 `SPEAKING`, **silencieuse, sans rendre la main** — repasser au repos couperait
 l'usager en plein milieu d'une phrase. `STOP` vide la file et abandonne la
 lecture ; les morceaux encore en vol ne la relancent pas.
+
+---
+
+## Choix de la langue d'entrée
+
+**Sur le chemin vocal, la langue n'est pas détectée : elle est déclarée.** Elle
+sélectionne le moteur STT *avant* qu'il existe une transcription, et les deux
+moteurs sont des architectures différentes (Wolof-HuBERT-CTC en décodage CTC,
+Whisper pour le français). Il n'y a rien à analyser tant qu'on n'a pas choisi.
+
+| Chemin | Origine de la langue | `trace.input_lang_source` |
+|--------|----------------------|---------------------------|
+| Borne, micro | bouton 🇸🇳 WOLOF / 🇫🇷 FRANÇAIS (`borne.js`, `pressLang`) | `indice` |
+| Chat, micro | sélecteur « Je parle… » à côté du bouton micro | `indice` |
+| Chat ou API, texte | **`detect_language()` sur le texte** | `détection` |
+
+La langue déclarée arrive en `lang_hint` et **l'emporte sur la détection**
+(`src/pipeline.py`, étape 1) : sur des phrases courtes, avec des emprunts et du
+code-switching, une détection ne peut que se tromper là où l'usager, lui, sait
+ce qu'il parle.
+
+Cette langue gouverne ensuite quatre décisions : la traduction WO→FR de la
+question, le choix du prompt système, la traduction FR→WO de la réponse, et la
+préparation du texte pour la synthèse.
+
+### Le contrôle a posteriori
+
+Se tromper de bouton n'est rattrapable par rien : la transcription est déjà
+faite par le mauvais moteur — HuBERT-CTC sur du français rend de la bouillie
+phonétique, Whisper forcé en français sur du wolof invente des mots — et la
+réponse repart dans la mauvaise langue.
+
+`contredit()` (`src/language/detector.py`) ne corrige donc pas, il **rend
+l'erreur visible** : la détection tourne malgré tout sur la transcription et,
+si elle contredit nettement la langue annoncée, le pipeline émet
+`alerte_langue` et les deux interfaces l'affichent dans le fil.
+
+Le seuil vit dans `detector.py` parce que c'est ce module qui sait que
+`detect_language` retombe sur `fr` quand rien ne tranche : sans lui, « Waaw. »
+déclarée en wolof lèverait une alerte à chaque fois. Le gagnant doit marquer au
+moins 6 points **et** doubler le perdant — un mot wolof reconnu en vaut 3, un
+mot français 2. Vérifié :
+
+| Cas | Verdict |
+|-----|---------|
+| français franc déclaré wolof | alerte (`wo=0`, `fr=18`) |
+| wolof franc déclaré français | alerte (`wo=29`, `fr=2`) |
+| langues concordantes | silence |
+| « Waaw. », transcription vide | silence |
+| « carte d'identité ci » (mélangé) | silence |
+
+> **Piège corrigé** : le chat n'envoyait aucune langue pour la dictée, et
+> `/ask/audio` retombait sur son défaut `Form("wo")`. Une question posée en
+> français au micro était donc transcrite par le modèle wolof, traduite WO→FR,
+> puis **répondue en wolof** — alors que la page affiche « Détecteur actif ».
+> Le sélecteur a été ajouté pour ça.
 
 ---
 
@@ -533,6 +448,7 @@ ci-dessous que ceux dont un mauvais réglage casse quelque chose.
 | `WARMUP_TTS` | `true` | Déclenche une synthèse à vide (~60 s). En chargement paresseux, ce coût tomberait dans la première requête |
 | `MEMORY_MAX_MESSAGES` | `10` | 10 entrées = 5 échanges, puis la mémoire est vidée |
 | `DEVICE` | `auto` | `cuda` > `mps` > `cpu`. Surchargeable par composant (`TTS_DEVICE`, `NLLB_DEVICE`…) |
+| `LOG_LEVEL` | `INFO` | `DEBUG` trace chaque étape du pipeline — le premier réflexe quand une requête se fige |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | Modèle **à raisonnement** : sa trace interne compte dans `LLM_MAX_TOKENS` |
 
 ---
@@ -577,12 +493,13 @@ TontumaBot_RAG1_V3/
 ├── src/
 │   ├── config.py              # Configuration (.env) + plafond mémoire MPS
 │   ├── device.py              # Choix du backend CPU / CUDA / MPS
+│   ├── journal.py             # Journalisation : niveaux, identifiant de requête
 │   ├── pipeline.py            # Pipeline RAG complet (+ callback SSE)
 │   ├── memory.py              # Mémoire conversationnelle par session
 │   ├── vectorstore.py         # ChromaDB + BM25/embeddings cachés + MMR
 │   ├── ingestion.py           # Indexation documents (TXT/MD/PDF)
 │   ├── input/stt.py           # STT bilingue (HuBERT wolof / Whisper français)
-│   ├── language/detector.py   # Détection de langue
+│   ├── language/detector.py   # Détection de langue + contrôle d'une langue déclarée
 │   ├── translation/
 │   │   ├── nllb.py            # Traduction WO↔FR, phrase par phrase en lot
 │   │   ├── nombres.py         # Nombres : chiffres ↔ lettres, réalignement FR/WO
@@ -613,6 +530,70 @@ sinon (`alerte_nombres`).
 Oolel-Voices ne lit correctement que du wolof en toutes lettres, et certains
 motifs (« APIX », « 8:00 ») détruisent l'énoncé entier. L'affichage, lui, garde
 ses chiffres.
+
+---
+
+## Journalisation et débogage
+
+Le projet traçait avec `print()` : pas d'horodatage, pas de niveau, aucun moyen
+de baisser le volume, et surtout **aucun lien entre une ligne et la requête qui
+l'a produite**. Sur une borne, FastAPI exécute le pipeline dans un fil séparé et
+deux usagers simultanés entrelacent leurs traces sans recours.
+
+`src/journal.py` remplace tout ça. Une ligne ressemble à ceci :
+
+```
+11:39:35.844  INFO    5582  pipeline     procedure · 448 car. · total=10127 ms   wo→fr=1099  intent=49  recher=102  fr→wo=8824
+└ heure à la ms       └ niveau  └ requête   └ composant
+```
+
+L'horloge va à la milliseconde parce que tout ce qu'on débogue ici est une
+affaire de latence. L'identifiant de requête tient en quatre caractères, assez
+pour distinguer sans manger la ligne.
+
+### Ce qu'on lit en pratique
+
+**La ligne de fin de requête donne la répartition de la latence** — c'est elle
+qu'on regarde quand « la borne est lente ». Sur l'exemple ci-dessus, la
+traduction FR→WO pèse 8,8 s sur 10,1 s : le poste fautif se désigne sans avoir
+à ouvrir la trace JSON.
+
+**En `DEBUG`, chaque étape est horodatée** : on voit où une requête se fige.
+
+```
+11:40:05.785  DEBUG   6b8f  pipeline     → detect lang=wo source=indice
+11:40:05.785  DEBUG   6b8f  pipeline     → translate_in
+11:40:29.498  DEBUG   6b8f  pipeline     → intent intent=procedure
+```
+
+### Réglages
+
+| | Défaut | Effet |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | `DEBUG` ajoute la progression étape par étape |
+| `LOG_FILE` | vide | chemin d'un fichier — rotation à 5 Mo, 3 archives |
+| `LOG_COULEUR` | `auto` | couleurs si un humain regarde, jamais dans un fichier |
+
+### Points de conception
+
+**Le contexte de requête ne traverse pas les fils d'exécution tout seul.**
+`run_in_executor` n'emporte pas les `contextvars` : `app.py` rouvre donc
+explicitement le contexte à l'intérieur du fil. Sans ce détail, tout ce que le
+pipeline journalise perdrait son identifiant — c'est-à-dire l'essentiel.
+
+**Les bibliothèques bavardes sont muselées** (`transformers`, `datasets`,
+`httpx`, `urllib3`…) et les avertissements Python passent par le journal au lieu
+d'écrire sur stderr. Leurs messages de dépréciation noyaient les traces utiles
+au point qu'il fallait les filtrer au `grep` pour lire quoi que ce soit.
+
+**Uvicorn est configuré avec `log_config=None`** pour que ses propres lignes
+adoptent le même format : une seule trace à lire, pas deux.
+
+**Une ligne de journal tient sur une ligne.** Les extraits de texte sont aplatis
+avant d'y être insérés : un message multi-ligne casse un `grep`.
+
+Les scripts de `benchmark/` et `src/evaluation/` gardent leurs `print()` — leur
+sortie *est* le livrable, pas une trace de service.
 
 ---
 

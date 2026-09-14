@@ -1,0 +1,124 @@
+{
+  "fichier": "brut_20260914_1106_p3.json",
+  "configuration": {
+    "horodatage": "2026-09-14T11:05:02",
+    "commit": "9acb635",
+    "arbre_propre": false,
+    "machine": "Darwin arm64",
+    "backends": {
+      "torch": "2.11.0",
+      "auto": "mps",
+      "cuda": false,
+      "mps": true,
+      "override": "auto",
+      "par_composant": {}
+    },
+    "llm_provider": "groq",
+    "llm_modele": "openai/gpt-oss-120b",
+    "llm_max_phrases": 3,
+    "llm_max_tokens": 800,
+    "reranker_top_k": 5,
+    "tts_n_steps": 4,
+    "tts_chunk_chars": 200,
+    "n_chunks_indexes": 32
+  },
+  "n_executions": 2,
+  "n_echecs": 0,
+  "latences_ms": {
+    "wo_fr": {
+      "n": 2,
+      "p50": 17781.5,
+      "p95": 17781.5,
+      "max": 17781.5
+    },
+    "intent": {
+      "n": 2,
+      "p50": 8912.7,
+      "p95": 8912.7,
+      "max": 8912.7
+    },
+    "retrieval": {
+      "n": 2,
+      "p50": 4655.2,
+      "p95": 4655.2,
+      "max": 4655.2
+    },
+    "rerank": {
+      "n": 2,
+      "p50": 4642.7,
+      "p95": 4642.7,
+      "max": 4642.7
+    },
+    "llm": {
+      "n": 2,
+      "p50": 1413.7,
+      "p95": 1413.7,
+      "max": 1413.7
+    },
+    "fr_wo": {
+      "n": 2,
+      "p50": 3373.4,
+      "p95": 3373.4,
+      "max": 3373.4
+    },
+    "tts": {},
+    "total": {
+      "n": 2,
+      "p50": 36191.7,
+      "p95": 36191.7,
+      "max": 36191.7
+    }
+  },
+  "longueur_car": {
+    "n": 2,
+    "p50": 254,
+    "p95": 254,
+    "max": 254
+  },
+  "retrieval": {
+    "rappel_moyen": 0.0,
+    "rang_median_utile": null,
+    "jamais_trouve": 1
+  },
+  "abstention": {
+    "attendue_et_faite": 1,
+    "attendue": 1,
+    "a_tort": 0
+  },
+  "couverture": {
+    "essentiels": 0.0,
+    "complementaires": 0.0,
+    "controle_lexical": 0.0
+  },
+  "fidelite": {
+    "contradictions": 1,
+    "inventions": 1
+  },
+  "alertes_langue": 0,
+  "par_question": [
+    {
+      "id": 1,
+      "repondable": true,
+      "abstenu": false,
+      "rappel": 0.0,
+      "premier_rang_utile": null,
+      "n_car": 254,
+      "duree_s": 36.19,
+      "essentiels": 0.0,
+      "complementaires": 0.0,
+      "contredit": 1,
+      "invente": true,
+      "detail": "La réponse indique que l’on peut se rendre directement à l’hôpital de Fann en bus, taxi ou voiture et utilise l’entrée principale, ce qui contredit le fait 1 (obligation d’obtenir une lettre de référence) et n’apparaît dans aucun fait attendu.",
+      "indices": 0.0
+    },
+    {
+      "id": 8,
+      "repondable": false,
+      "abstenu": true,
+      "rappel": null,
+      "premier_rang_utile": null,
+      "n_car": 63,
+      "duree_s": 3.46
+    }
+  ]
+}

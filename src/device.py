@@ -22,6 +22,10 @@ runtime est absent. Les deux vérifications sont donc conservées.
 """
 import os
 
+from journal import journal
+
+_log = journal("device")
+
 _CHOIX_VALIDES = ("cuda", "mps", "cpu")
 
 # Résolutions déjà calculées : la détection ne coûte presque rien, mais on veut
@@ -73,25 +77,26 @@ def resolve(composant: str | None = None, *, verbeux: bool = True) -> str:
         return _cache[cle_cache]
 
     voulu = _demande(composant)
-    etiquette = f"[device/{composant}]" if composant else "[device]"
+    # Le composant concerné, sans crochets : la colonne du journal porte déjà
+    # « device », on n'y ajoute que la précision utile (nllb, tts, embedder…).
+    etiquette = composant or "global"
 
     if voulu is None:
         choisi = _auto()
     elif voulu not in _CHOIX_VALIDES:
-        print(f"{etiquette} valeur inconnue '{voulu}' "
-              f"(attendu : {', '.join(_CHOIX_VALIDES)}, ou auto) — détection automatique.")
+        _log.warning("%s valeur inconnue '%s' (attendu : %s, ou auto) — "
+                     "détection automatique.", etiquette, voulu, ', '.join(_CHOIX_VALIDES))
         choisi = _auto()
     elif not _disponible(voulu):
         choisi = _auto()
-        print(f"{etiquette} '{voulu}' demandé mais indisponible sur cette machine "
-              f"— repli sur '{choisi}'.")
+        _log.warning("%s '%s' demandé mais indisponible sur cette machine — "
+                     "repli sur '%s'.", etiquette, voulu, choisi)
     else:
         choisi = voulu
 
     if verbeux:
         origine = "imposé" if voulu and _disponible(voulu) else "auto"
-        print(f"{etiquette} {choisi.upper()} ({origine})")
-
+        _log.info("%s → %s (%s)", etiquette, choisi.upper(), origine)
     _cache[cle_cache] = choisi
     return choisi
 
@@ -137,9 +142,9 @@ def infos() -> dict:
 
 if __name__ == "__main__":
     import torch
-    print(f"torch {torch.__version__}")
+    _log.info(f"torch {torch.__version__}")
     for nom in _CHOIX_VALIDES:
-        print(f"  {nom:5} : {'disponible' if _disponible(nom) else 'indisponible'}")
-    print(f"\nauto → {_auto()}\n")
+        _log.error(f"  {nom:5} : {'disponible' if _disponible(nom) else 'indisponible'}")
+    _log.info(f"\nauto → {_auto()}\n")
     for c in ("stt", "nllb", "tts", "embedder", "reranker", "llm"):
-        print(f"  {c:9} → {resolve(c, verbeux=False)}")
+        _log.info(f"  {c:9} → {resolve(c, verbeux=False)}")

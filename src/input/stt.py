@@ -26,6 +26,10 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from config import settings  # noqa: E402
 
+from journal import journal
+
+_log = journal("stt")
+
 WOLOF    = "wo"
 FRANCAIS = "fr"
 
@@ -84,13 +88,12 @@ def _build_wolof():
     local = settings.STT_WO_MODEL
     if local and os.path.isdir(local) and _is_hubert_ctc(local):
         src = local
-        print(f"[STT/wo] Chargement depuis dossier local : {src}")
+        _log.info(f"Chargement depuis dossier local : {src}")
     else:
         if local and os.path.isdir(local):
-            print(f"[STT/wo] {local} n'est pas un checkpoint HuBERT-CTC — ignoré.")
+            _log.warning(f"{local} n'est pas un checkpoint HuBERT-CTC — ignoré.")
         src = _HUB_WO_MODEL
-        print(f"[STT/wo] Téléchargement depuis Hub : {src} ...")
-
+        _log.info(f"Téléchargement depuis Hub : {src} ...")
     processor = Wav2Vec2Processor.from_pretrained(src)
     model     = HubertForCTC.from_pretrained(src)
     model.eval()
@@ -115,8 +118,7 @@ def _build_francais():
     from transformers import pipeline
 
     src = settings.STT_FR_MODEL
-    print(f"[STT/fr] Chargement de {src} ...")
-
+    _log.info(f"Chargement de {src} ...")
     # Whisper encode toujours une fenêtre de 30 s : inutile de la fractionner
     # davantage, on aligne le découpage sur cette fenêtre native.
     asr = pipeline(
@@ -148,7 +150,7 @@ def load_model(language: str = WOLOF):
     lang = FRANCAIS if str(language).lower().startswith("fr") else WOLOF
     if lang not in _engines:
         _engines[lang] = _BUILDERS[lang]()
-        print(f"[STT/{lang}] Modèle prêt ({_sources.get(lang, settings.STT_FR_MODEL)}).")
+        _log.info(f"Modèle prêt ({_sources.get(lang, settings.STT_FR_MODEL)}).")
     return _engines[lang]
 
 
@@ -185,7 +187,7 @@ def source(language: str = WOLOF) -> str:
 if __name__ == "__main__":
     import sys as _sys
     if len(_sys.argv) < 2:
-        print("Usage : python stt.py <audio_path> [wo|fr]")
+        _log.info("Usage : python stt.py <audio_path> [wo|fr]")
         _sys.exit(1)
     lang = _sys.argv[2] if len(_sys.argv) > 2 else WOLOF
-    print(f"[STT/{lang}] Transcription : {transcribe(_sys.argv[1], language=lang)}")
+    _log.info(f"Transcription : {transcribe(_sys.argv[1], language=lang)}")

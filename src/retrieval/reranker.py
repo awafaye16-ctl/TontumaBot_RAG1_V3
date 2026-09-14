@@ -4,6 +4,10 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from config import settings
 
+from journal import journal
+
+_log = journal("reranker")
+
 _model = None
 
 
@@ -14,9 +18,9 @@ def load_model():
     from sentence_transformers import CrossEncoder  # import lazy
     import device as _dev
     dev = _dev.resolve("reranker")
-    print(f"[Reranker] Chargement ({settings.RERANKER_MODEL}) sur {dev.upper()}...")
+    _log.info(f"Chargement ({settings.RERANKER_MODEL}) sur {dev.upper()}...")
     _model = CrossEncoder(settings.RERANKER_MODEL, device=dev)
-    print("[Reranker] Chargé.")
+    _log.info("Chargé.")
     return _model
 
 

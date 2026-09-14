@@ -331,6 +331,18 @@
       text-align: center;
     }
 
+    /* Une alerte se distingue d'une note de service : elle demande une action
+       de l'usager, pas seulement son information. */
+    .sysmsg.alerte {
+      max-width: 80%;
+      border-style: solid;
+      border-color: var(--danger);
+      color: var(--text);
+      background: rgba(255, 92, 122, 0.08);
+      border-radius: var(--radius-sm);
+      line-height: 1.5;
+    }
+
     /* Progression du pipeline, dans la bulle de traitement : elle naît et
        disparaît avec elle, sans rien déplacer dans la page. */
     .progress {
@@ -646,7 +658,15 @@
       <div class="tools">
         <button class="tool" id="btn-audio">🎙️ <span>Parler</span> <span class="fn"
             id="rec-timer">micro</span></button>
-        <button class="tool" id="btn-image">🖼️ <span>Photo / Doc</span> <span class="fn">OCR</span></button>
+        <!-- Langue de la dictée. Elle n'est pas détectable depuis l'audio : elle
+             choisit le moteur STT avant qu'il existe une transcription, et les
+             deux moteurs sont des architectures différentes (HuBERT-CTC pour le
+             wolof, Whisper pour le français). Sans ce sélecteur, le serveur
+             retombait sur son défaut 'wo' et transcrivait tout en wolof. -->
+        <select class="tts-select" id="stt-lang" title="Langue de la dictée">
+          <option value="wo">🇸🇳 Je parle wolof</option>
+          <option value="fr">🇫🇷 Je parle français</option>
+        </select>
       </div>
       <div class="fileinfo" id="fileinfo"></div>
       <div class="inputrow">
@@ -669,7 +689,6 @@
       </div>
     </div>
 
-    <input type="file" id="file-image" accept="image/*" hidden>
     <input type="file" id="file-audio" accept="audio/*" capture hidden>
     <div class="toast" id="toast"></div>
   </div>
@@ -904,13 +923,34 @@
       translate_out: '🔄 Traduction FR→WO…',
       tts:           '🔊 Synthèse vocale…',
       tts_chunk:     '🔊 Synthèse vocale…',
+      // Les alertes ne sont pas des étapes de travail : sans libellé, leur nom
+      // brut s'afficherait à la place de l'étape en cours.
+      alerte_langue:  '⚠️ Langue annoncée douteuse…',
+      alerte_nombres: '⚠️ Contrôle des nombres…',
     };
+
+    const NOM_LANGUE = { wo: 'wolof', fr: 'français' };
 
     // Cette page lit la réponse d'un seul tenant (<audio controls> sur
     // `audio_url`) : les morceaux diffusés ne servent ici qu'à afficher
     // l'avancement de la synthèse. La borne, elle, les enchaîne (borne.js).
     function updateTyping(step, data) {
       progresEtape(step, data);
+
+      // La contradiction entre la langue annoncée et la transcription mérite
+      // mieux qu'un libellé fugace : elle explique une réponse qui va paraître
+      // absurde, et elle reste lisible après coup dans le fil.
+      if (step === 'alerte_langue' && data) {
+        const d = document.createElement('div');
+        d.className = 'sysmsg alerte';
+        d.textContent = '⚠️ Vous avez choisi « ' + (NOM_LANGUE[data.declaree] || data.declaree)
+          + ' », mais la transcription ressemble à du '
+          + (NOM_LANGUE[data.detectee] || data.detectee)
+          + '. La réponse risque d’être à côté — changez la langue de la dictée et réessayez.';
+        chat.appendChild(d);
+        chat.scrollTop = chat.scrollHeight;
+      }
+
       const lab = $('typing-label');
       if (!lab) return;
       let label = STEP_LABELS[step] || esc(step);
@@ -984,6 +1024,12 @@
       fd.append('file', file);
       fd.append('tts', $('tts').checked);
       fd.append('session_id', SESSION_ID);
+      // La dictée doit annoncer sa langue : elle sélectionne le moteur STT, et
+      // le serveur retombe sinon sur son défaut ('wo'), qui transcrirait une
+      // question française avec le modèle wolof puis répondrait en wolof.
+      if (endpoint === '/ask/audio') {
+        fd.append('lang', ($('stt-lang') || {}).value || 'wo');
+      }
       try {
         const res = await fetch(endpoint, { method: 'POST', body: fd });
         await consumeSSE(res, {
@@ -1014,22 +1060,6 @@
       autoGrow();
       $('input').focus();
     }));
-
-    function bindFile(btnId, inputId, accept, action) {
-      const btn = $(btnId), input = $(inputId);
-      input.accept = accept;
-      btn.addEventListener('click', () => input.click());
-      input.addEventListener('change', () => {
-        const f = input.files[0];
-        if (!f) return;
-        $('fileinfo').textContent = 'Fichier prêt : ' + f.name + ' (' + (f.size / 1024).toFixed(0) + ' Ko)';
-        $('fileinfo').classList.add('show');
-        action(f);
-        input.value = '';
-      });
-    }
-    bindFile('btn-image', 'file-image', 'image/*',
-      f => sendFile('/ask/image', f, 'Extraction OCR en cours…'));
 
     // ---- Enregistrement micro (MediaRecorder) ----
     const recBtn = $('btn-audio'), recTimer = $('rec-timer');

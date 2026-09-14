@@ -17,6 +17,10 @@ FRENCH = "fra_Latn"
 
 # ── Modèle unique (les deux directions) ──────────────────────────────────
 from config import settings as _settings
+
+from journal import journal
+
+_log = journal("nllb")
 _CHECKPOINT = _settings.NLLB_WO_FR_MODEL  # bilalfaye/nllb-200-distilled-600M-wo-fr-en
 
 _tok   = None
@@ -42,15 +46,13 @@ def _load_model():
         return
     import device as _dev
     dev = _get_device()
-    print(f"[NLLB] Chargement ({_CHECKPOINT}) sur {dev.upper()}...")
+    _log.info(f"Chargement ({_CHECKPOINT}) sur {dev.upper()}...")
     _tok   = NllbTokenizer.from_pretrained(_CHECKPOINT)
     _model = AutoModelForSeq2SeqLM.from_pretrained(
         _CHECKPOINT, torch_dtype=_dev.dtype("nllb")
     ).to(dev)
     _model.eval()
-    print("[NLLB] Chargé.")
-
-
+    _log.info("Chargé.")
 # =============================================================================
 #  Découpage en phrases
 # =============================================================================
@@ -161,12 +163,11 @@ def french_to_wolof(text: str) -> tuple[str, float]:
 
 
 if __name__ == "__main__":
-    print("=== Test WO→FR ===")
+    _log.info("=== Test WO→FR ===")
     tr, d = wolof_to_french("dama beug wout kayitu juddu?")
-    print(f"  WO : dama beug wout kayitu juddu?")
-    print(f"  FR : {tr}  ({d}s)\n")
-
-    print("=== Test FR→WO ===")
+    _log.info(f"  WO : dama beug wout kayitu juddu?")
+    _log.info(f"  FR : {tr}  ({d}s)\n")
+    _log.info("=== Test FR→WO ===")
     tr, d = french_to_wolof("Comment obtenir un extrait de naissance ?")
-    print(f"  FR : Comment obtenir un extrait de naissance ?")
-    print(f"  WO : {tr}  ({d}s)")
+    _log.info(f"  FR : Comment obtenir un extrait de naissance ?")
+    _log.info(f"  WO : {tr}  ({d}s)")

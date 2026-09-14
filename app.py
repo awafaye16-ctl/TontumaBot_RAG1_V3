@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from config import settings
 import device
+from journal import journal, configurer as configurer_journal, contexte_requete, nouvel_identifiant
 from pipeline import answer as pipeline_answer
 from seed_docs import get_documents
 import memory
@@ -45,17 +46,20 @@ def _warmup() -> None:
     # Le backend est annoncé une fois pour toutes : c'est la première chose à
     # vérifier quand la latence dérape (un repli silencieux sur CPU multiplie
     # les temps de traduction par trois).
+    log = journal("warmup")
     infos = device.infos()
-    print(f"[device] torch {infos['torch']} — cuda={infos['cuda']} mps={infos['mps']} "
-          f"→ auto={infos['auto']} (DEVICE={infos['override']})")
+    log.info("torch %s — cuda=%s mps=%s → auto=%s (DEVICE=%s)",
+             infos["torch"], infos["cuda"], infos["mps"], infos["auto"], infos["override"])
 
     def _step(name: str, fn):
         t0 = time.perf_counter()
         try:
             fn()
-            print(f"[warmup] {name} prêt ({(time.perf_counter() - t0) * 1000:.0f} ms)")
+            log.info("%-12s prêt en %.0f ms", name, (time.perf_counter() - t0) * 1000)
         except Exception as e:
-            print(f"[warmup] {name} ignoré : {e}")
+            # Un modèle absent au démarrage n'arrête pas le service : il sera
+            # rechargé à la demande, ou le composant restera indisponible.
+            log.warning("%-12s ignoré : %s", name, e)
 
     # Embedder + cache du corpus (index BM25 + embeddings)
     _step("embedder", vectorstore.get_embedder)
@@ -107,13 +111,22 @@ def _warmup() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # La journalisation s'installe avant tout le reste : sans elle, les lignes
+    # émises pendant le chargement des modèles partiraient en `print` brut et
+    # échapperaient au niveau, au fichier et à l'horodatage.
+    configurer_journal()
+    demarrage = journal("serveur")
     if settings.WARMUP_ON_START:
-        print("[warmup] Préchargement des modèles au démarrage...")
+        demarrage.info("préchargement des modèles au démarrage")
         t0 = time.perf_counter()
         # Chargement bloquant hors de l'event loop
         await asyncio.get_running_loop().run_in_executor(None, _warmup)
-        print(f"[warmup] Terminé en {time.perf_counter() - t0:.1f} s")
+        demarrage.info("warm-up terminé en %.1f s", time.perf_counter() - t0)
+    else:
+        demarrage.info("warm-up désactivé — les modèles se chargeront à la demande")
+    demarrage.info("prêt sur %s:%s", settings.HOST, settings.PORT)
     yield
+    demarrage.info("arrêt du serveur")
 
 
 app = FastAPI(title="TontumaBot V3", version="3.0.0", lifespan=lifespan)
@@ -192,6 +205,12 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
     loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
 
+    # Un identifiant par requête, porté par toutes les lignes de journal
+    # qu'elle produira. Deux usagers qui parlent en même temps deviennent
+    # démêlables — sans lui, leurs traces s'entrelacent sans recours.
+    rid = nouvel_identifiant()
+    log = journal("requete")
+
     # La mémoire est lue avant le tour et complétée après : le pipeline reste
     # sans état, l'historique appartient à la session.
     conv    = memory.get(session_id)
@@ -201,23 +220,35 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
         loop.call_soon_threadsafe(q.put_nowait, ("status", {"step": step, **info}))
 
     def run():
-        try:
-            result = pipeline_answer(
-                question,
-                provider      = provider,
-                tts           = tts,
-                tts_out       = tts_out,
-                lang_hint     = lang_hint,
-                seed_docs     = SEED_DOCS,
-                seed_filtered = SEED_FILTERED,
-                progress      = progress,
-                history       = history,
-            )
-            loop.call_soon_threadsafe(q.put_nowait, ("result", result))
-        except Exception as e:  # noqa: BLE001
-            loop.call_soon_threadsafe(q.put_nowait, ("error", {"message": str(e)}))
-        finally:
-            loop.call_soon_threadsafe(q.put_nowait, None)  # sentinelle de fin
+        # `run_in_executor` n'emporte PAS le contexte de l'appelant : sans ce
+        # bloc, tout ce que le pipeline journalise depuis son fil d'exécution
+        # perdrait l'identifiant de la requête, c'est-à-dire l'essentiel.
+        with contexte_requete(rid):
+            debut = time.perf_counter()
+            log.info("question (%d car.) · provider=%s · tts=%s · langue=%s",
+                     len(question), provider, tts, lang_hint or "à détecter")
+            try:
+                result = pipeline_answer(
+                    question,
+                    provider      = provider,
+                    tts           = tts,
+                    tts_out       = tts_out,
+                    lang_hint     = lang_hint,
+                    seed_docs     = SEED_DOCS,
+                    seed_filtered = SEED_FILTERED,
+                    progress      = progress,
+                    history       = history,
+                )
+                log.info("terminée en %.1f s", time.perf_counter() - debut)
+                loop.call_soon_threadsafe(q.put_nowait, ("result", result))
+            except Exception as e:  # noqa: BLE001
+                # exc_info : sans la pile, une erreur de pipeline est
+                # indéboguable — le message seul ne dit pas d'où elle vient.
+                log.error("échec après %.1f s : %s", time.perf_counter() - debut, e,
+                          exc_info=True)
+                loop.call_soon_threadsafe(q.put_nowait, ("error", {"message": str(e)}))
+            finally:
+                loop.call_soon_threadsafe(q.put_nowait, None)  # sentinelle de fin
 
     loop.run_in_executor(None, run)
 
@@ -584,6 +615,13 @@ if __name__ == "__main__":
             "ssl_certfile": settings.SSL_CERTFILE,
             "ssl_keyfile":  settings.SSL_KEYFILE,
         }
-        print(f"[serveur] HTTPS activé → https://{settings.HOST}:{settings.PORT}")
+        journal("serveur").info("HTTPS activé → https://%s:%s",
+                                settings.HOST, settings.PORT)
 
-    uvicorn.run(app, host=settings.HOST, port=settings.PORT, **ssl_options)
+    # log_config=None : uvicorn installe sinon ses propres gestionnaires, et ses
+    # lignes (démarrage, accès HTTP) sortiraient dans un autre format, sans
+    # horodatage à la milliseconde ni identifiant de requête. En le désactivant,
+    # tout passe par le journal du projet — une seule trace à lire.
+    configurer_journal()
+    uvicorn.run(app, host=settings.HOST, port=settings.PORT,
+                log_config=None, **ssl_options)

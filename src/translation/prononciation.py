@@ -25,6 +25,10 @@ import re
 
 from .nombres import _LIAISON_MOT, _wo_nombre, en_lettres_wolof
 
+from journal import journal
+
+_log = journal("prononciation")
+
 # ── Tables arbitrées ──────────────────────────────────────────────────────
 
 # Graphie prononçable des sigles. Un sigle absent de cette table est laissé
@@ -193,4 +197,4 @@ if __name__ == "__main__":
     for source in CAS:
         sortie, bilan = pour_synthese(source)
         marque = f"   [inconnus: {bilan['sigles_inconnus']}]" if bilan["sigles_inconnus"] else ""
-        print(f"  {source}\n    -> {sortie}{marque}")
+        _log.info(f"  {source}\n    -> {sortie}{marque}")

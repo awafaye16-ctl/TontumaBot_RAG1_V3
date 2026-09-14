@@ -19,6 +19,10 @@ import os
 import re
 import sys
 
+from journal import journal
+
+_log = journal("intent")
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ── Phrases-prototypes ───────────────────────────────────────────────────────
@@ -134,5 +138,5 @@ def detect_intent(query_fr: str, query_embedding: list[float] | None = None) -> 
         scores = _best_scores(query_embedding)
         return max(scores, key=scores.get)
     except Exception as e:  # embedder indisponible → repli mots-clés
-        print(f"[Intent] Embedder indisponible ({e}) — repli mots-clés")
+        _log.error(f"Embedder indisponible ({e}) — repli mots-clés")
         return detect_intent_keywords(query_fr)

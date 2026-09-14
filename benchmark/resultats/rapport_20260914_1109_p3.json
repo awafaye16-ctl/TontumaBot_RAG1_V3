@@ -1,0 +1,139 @@
+{
+  "fichier": "brut_20260914_1109_p3.json",
+  "configuration": {
+    "horodatage": "2026-09-14T11:08:34",
+    "commit": "9acb635",
+    "arbre_propre": false,
+    "machine": "Darwin arm64",
+    "backends": {
+      "torch": "2.11.0",
+      "auto": "mps",
+      "cuda": false,
+      "mps": true,
+      "override": "auto",
+      "par_composant": {}
+    },
+    "llm_provider": "groq",
+    "llm_modele": "openai/gpt-oss-120b",
+    "llm_max_phrases": 3,
+    "llm_max_tokens": 800,
+    "reranker_top_k": 5,
+    "tts_n_steps": 4,
+    "tts_chunk_chars": 200,
+    "n_chunks_indexes": 32
+  },
+  "n_executions": 3,
+  "n_echecs": 0,
+  "latences_ms": {
+    "wo_fr": {
+      "n": 3,
+      "p50": 976.2,
+      "p95": 1347.9,
+      "max": 1347.9
+    },
+    "intent": {
+      "n": 3,
+      "p50": 50.7,
+      "p95": 56.4,
+      "max": 56.4
+    },
+    "retrieval": {
+      "n": 3,
+      "p50": 89.3,
+      "p95": 91.3,
+      "max": 91.3
+    },
+    "rerank": {
+      "n": 3,
+      "p50": 88.4,
+      "p95": 90.3,
+      "max": 90.3
+    },
+    "llm": {
+      "n": 3,
+      "p50": 1197.4,
+      "p95": 1975.9,
+      "max": 1975.9
+    },
+    "fr_wo": {
+      "n": 3,
+      "p50": 3277.8,
+      "p95": 4239.4,
+      "max": 4239.4
+    },
+    "tts": {},
+    "total": {
+      "n": 3,
+      "p50": 5975.1,
+      "p95": 7249.4,
+      "max": 7249.4
+    }
+  },
+  "longueur_car": {
+    "n": 3,
+    "p50": 257,
+    "p95": 296,
+    "max": 296
+  },
+  "retrieval": {
+    "rappel_moyen": 0.083,
+    "rang_median_utile": 3,
+    "jamais_trouve": 1
+  },
+  "abstention": {
+    "attendue_et_faite": 1,
+    "attendue": 1,
+    "a_tort": 0
+  },
+  "couverture": {
+    "essentiels": 0.0,
+    "complementaires": 0.0,
+    "controle_lexical": 0.062
+  },
+  "fidelite": {
+    "contradictions": 0,
+    "inventions": 2
+  },
+  "alertes_langue": 0,
+  "par_question": [
+    {
+      "id": 1,
+      "repondable": true,
+      "abstenu": false,
+      "rappel": 0.0,
+      "premier_rang_utile": null,
+      "n_car": 257,
+      "duree_s": 5.98,
+      "essentiels": 0.0,
+      "complementaires": 0.0,
+      "contredit": 0,
+      "invente": true,
+      "detail": "Affirme que l'hôpital de Fann se situe dans le quartier de Fann près de l'université, indique les moyens de transport, le parking et l'entrée principale, informations précises non présentes dans les faits attendus.",
+      "indices": 0.0
+    },
+    {
+      "id": 8,
+      "repondable": false,
+      "abstenu": true,
+      "rappel": null,
+      "premier_rang_utile": null,
+      "n_car": 63,
+      "duree_s": 2.71
+    },
+    {
+      "id": 13,
+      "repondable": true,
+      "abstenu": false,
+      "rappel": 0.16666666666666666,
+      "premier_rang_utile": 3,
+      "n_car": 296,
+      "duree_s": 7.25,
+      "essentiels": 0.0,
+      "complementaires": 0.0,
+      "contredit": 0,
+      "invente": true,
+      "detail": "La réponse indique le lieu exact de l’hôpital (quartier de Fann, près de l’université) qui n’est mentionné dans aucun des faits attendus.",
+      "indices": 0.125
+    }
+  ]
+}

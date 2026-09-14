@@ -9,6 +9,7 @@ Modèles sélectionnés après benchmark :
   - LLM    : Qwen/Qwen2.5-7B-Instruct (local 4bit) ou Groq/Gemini (API)
 """
 import os
+import re
 from pathlib import Path
 
 # ── Désactiver TensorFlow/Keras avant tout import ─────────────────────────
@@ -31,6 +32,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
 
 
+def _valeur_env(brut: str) -> str:
+    """Nettoie la partie droite d'une ligne de .env.
+
+    Le commentaire de fin de ligne doit disparaître : `.env.example` en est
+    rempli, et `cp .env.example .env` — ce que font le README et demarrer.sh —
+    produisait sinon une configuration qui plante à l'import, `NLLB_NUM_BEAMS`
+    valant la chaîne « 2         # 2 = qualité, 1 = greedy ».
+
+    Un « # » ne démarre un commentaire que précédé d'une espace : une clé d'API
+    ou un mot de passe peut en contenir un, et le couper là silencieusement
+    donnerait une panne d'authentification impossible à comprendre.
+
+    Une valeur entre guillemets est prise telle quelle, sans interpréter ce qui
+    suit — c'est la convention usuelle des fichiers .env.
+    """
+    brut = brut.strip()
+    if brut[:1] in ("'", '"'):
+        fin = brut.find(brut[0], 1)
+        return brut[1:fin] if fin > 0 else brut[1:]
+    coupe = re.search(r"\s#", brut)
+    return brut[:coupe.start()].strip() if coupe else brut
+
+
 def _load_env():
     if not ENV_FILE.exists():
         return
@@ -39,7 +63,7 @@ def _load_env():
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip())
+        os.environ.setdefault(key.strip(), _valeur_env(value))
 
 
 _load_env()
