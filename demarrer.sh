@@ -172,7 +172,16 @@ fi
 #  `|| true` sur chaque lecture : sans correspondance, grep sort en erreur et
 #  `set -e` interromprait le script alors qu'une clé absente est justement le
 #  cas qu'on veut signaler.
-lire_env() { grep "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' || true; }
+#
+#  Le commentaire de fin de ligne est retiré, comme le fait src/config.py :
+#  `.env.example` en est rempli, et « PORT=8008  # le port » donnerait sinon une
+#  URL inutilisable. Un « # » ne commence un commentaire que précédé d'une
+#  espace — une clé d'API peut en contenir un, et la couper là donnerait une
+#  panne d'authentification incompréhensible.
+lire_env() {
+    grep "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- \
+        | sed 's/[[:space:]][[:space:]]*#.*$//' | tr -d ' \r' || true
+}
 
 PROVIDER=$(lire_env LLM_PROVIDER); PROVIDER=${PROVIDER:-groq}
 case "$PROVIDER" in
@@ -248,6 +257,9 @@ echo "     Démo   : http://localhost:${PORT}/"
 echo "     Santé  : http://localhost:${PORT}/health"
 echo
 echo "     Arrêt  : Ctrl+C"
+echo
+echo "     Traces : LOG_LEVEL=DEBUG ./demarrer.sh   (chaque étape du pipeline,"
+echo "              horodatée, avec l'identifiant de la requête)"
 echo
 
 #  exec : le serveur remplace le script, donc Ctrl+C l'atteint directement au

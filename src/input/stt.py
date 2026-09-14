@@ -187,7 +187,7 @@ def source(language: str = WOLOF) -> str:
 if __name__ == "__main__":
     import sys as _sys
     if len(_sys.argv) < 2:
-        _log.info("Usage : python stt.py <audio_path> [wo|fr]")
+        print("Usage : python stt.py <audio_path> [wo|fr]")
         _sys.exit(1)
     lang = _sys.argv[2] if len(_sys.argv) > 2 else WOLOF
-    _log.info(f"Transcription : {transcribe(_sys.argv[1], language=lang)}")
+    print(f"Transcription : {transcribe(_sys.argv[1], language=lang)}")

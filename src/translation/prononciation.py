@@ -197,4 +197,4 @@ if __name__ == "__main__":
     for source in CAS:
         sortie, bilan = pour_synthese(source)
         marque = f"   [inconnus: {bilan['sigles_inconnus']}]" if bilan["sigles_inconnus"] else ""
-        _log.info(f"  {source}\n    -> {sortie}{marque}")
+        print(f"  {source}\n    -> {sortie}{marque}")

@@ -196,4 +196,4 @@ if __name__ == "__main__":
     import sys as _sys
     for p in _sys.argv[1:]:
         n = ingest_file(p)
-        _log.info(f"{p} → {n} chunks indexés")
+        print(f"{p} → {n} chunks indexés")

@@ -142,9 +142,9 @@ def infos() -> dict:
 
 if __name__ == "__main__":
     import torch
-    _log.info(f"torch {torch.__version__}")
+    print(f"torch {torch.__version__}")
     for nom in _CHOIX_VALIDES:
-        _log.error(f"  {nom:5} : {'disponible' if _disponible(nom) else 'indisponible'}")
-    _log.info(f"\nauto → {_auto()}\n")
+        print(f"  {nom:5} : {'disponible' if _disponible(nom) else 'indisponible'}")
+    print(f"\nauto → {_auto()}\n")
     for c in ("stt", "nllb", "tts", "embedder", "reranker", "llm"):
-        _log.info(f"  {c:9} → {resolve(c, verbeux=False)}")
+        print(f"  {c:9} → {resolve(c, verbeux=False)}")

@@ -396,4 +396,4 @@ if __name__ == "__main__":
     txt = _sys.argv[1] if len(_sys.argv) > 1 else "Jàmm nga fanaan. Nanga def?"
     out = _sys.argv[2] if len(_sys.argv) > 2 else "test_v3.wav"
     result = synthesize(txt, out)
-    _log.info(f"{source()} → {result}")
+    print(f"{source()} → {result}")

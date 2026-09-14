@@ -163,11 +163,11 @@ def french_to_wolof(text: str) -> tuple[str, float]:
 
 
 if __name__ == "__main__":
-    _log.info("=== Test WO→FR ===")
+    print("=== Test WO→FR ===")
     tr, d = wolof_to_french("dama beug wout kayitu juddu?")
-    _log.info(f"  WO : dama beug wout kayitu juddu?")
-    _log.info(f"  FR : {tr}  ({d}s)\n")
-    _log.info("=== Test FR→WO ===")
+    print(f"  WO : dama beug wout kayitu juddu?")
+    print(f"  FR : {tr}  ({d}s)\n")
+    print("=== Test FR→WO ===")
     tr, d = french_to_wolof("Comment obtenir un extrait de naissance ?")
-    _log.info(f"  FR : Comment obtenir un extrait de naissance ?")
-    _log.info(f"  WO : {tr}  ({d}s)")
+    print(f"  FR : Comment obtenir un extrait de naissance ?")
+    print(f"  WO : {tr}  ({d}s)")

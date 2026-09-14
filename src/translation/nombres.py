@@ -273,14 +273,14 @@ if __name__ == "__main__":
         ("Une pièce d'identité valide.",                 None),
         ("Rien à convertir ici.",                        None),
     ]
-    _log.info("── FR en lettres -> chiffres (avant NLLB) ──────────────────────")
+    print("── FR en lettres -> chiffres (avant NLLB) ──────────────────────")
     ok = 0
     for source, attendu in CAS:
         sortie = en_chiffres(source)
         bon = (sortie == source) if attendu is None else (attendu in sortie)
         ok += bon
-        _log.info(f"  {'ok ' if bon else 'KO '} {source}\n      -> {sortie}")
-    _log.info(f"  {ok}/{len(CAS)} cas corrects\n")
+        print(f"  {'ok ' if bon else 'KO '} {source}\n      -> {sortie}")
+    print(f"  {ok}/{len(CAS)} cas corrects\n")
     # Montants : le nombre prononcé est le montant divisé par 5 (dërëm).
     # Tout le reste se compte normalement.
     CAS_WO = [
@@ -295,14 +295,14 @@ if __name__ == "__main__":
         ("Jamono 21 fan la.",                "ñaari fukk ak benn fan"),
         ("Etaas 3 bi.",                      "ñett bi"),
     ]
-    _log.info("── chiffres -> wolof parlé (avant TTS) ─────────────────────────")
+    print("── chiffres -> wolof parlé (avant TTS) ─────────────────────────")
     ok_wo = 0
     for source, attendu in CAS_WO:
         sortie = en_lettres_wolof(source)
         bon = attendu in sortie
         ok_wo += bon
-        _log.info(f"  {'ok ' if bon else 'KO '} {source}\n      -> {sortie}")
-    _log.info(f"  {ok_wo}/{len(CAS_WO)} cas corrects")
+        print(f"  {'ok ' if bon else 'KO '} {source}\n      -> {sortie}")
+    print(f"  {ok_wo}/{len(CAS_WO)} cas corrects")
 # =============================================================================
 #  Garde-fou : les nombres ont-ils survécu à la traduction ?
 # =============================================================================
