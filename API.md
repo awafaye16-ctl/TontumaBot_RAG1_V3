@@ -3,11 +3,30 @@
 > Assistant administratif multilingue (Wolof / Français) : RAG hybride, STT par
 > langue, synthèse vocale diffusée par morceaux.
 
-**Base URL** : `http://localhost:8008` · **Version** : `3.0.0`
+**Base URL** : `http://localhost:8008` · **Version** : `3.1.0`
 
 Ce document est le contrat pour qui **consomme** l'API. Le fonctionnement
 interne — latences mesurées, plafond mémoire, journalisation — est décrit dans
 le `README.md`.
+
+---
+
+## Ce qui change depuis la V3.0
+
+| V3.0 | V3.1 |
+|---|---|
+| base documentaire unique | **une base vectorielle par organisation**, isolée sur le disque |
+| — | `organization_id` (UUID) **requis** sur `/ask` et `/ask/audio` |
+| `/admin/documents*` | `/admin/organizations/{organization_id}/documents*` |
+| ingestion par fichier ou texte | **+ ingestion par pointeur** MinIO (`bucket` + `objectKey`) |
+| `{ok, chunks, title}` | `{ok, document_id, organization_id, chunks, replaced, …}` |
+| identifiant de document calculé en interne | **fourni par l'appelant** — republier remplace au lieu d'empiler |
+| traçabilité enfouie dans `trace.retrieval.chunks` | **champ `sources`** au premier niveau de `result` |
+| `EMBED_MODEL` modifié → collection purgée | → `409`, **aucune donnée touchée** |
+| `n_documents` / `n_chunks` globaux sur `/health` | `organizations: {total, chargees}` + `storage` |
+
+Le contrat d'intégration destiné au backend est détaillé dans
+**`INTEGRATION_BACKEND.md`**.
 
 ---
 
@@ -41,11 +60,17 @@ le `README.md`.
 
 **Aucune.** Tous les endpoints sont publics et CORS est ouvert à `*`.
 
-> ⚠️ Cela inclut `/admin/documents` : n'importe qui pouvant joindre le service
-> peut **ajouter, lister ou effacer** la base documentaire. Le fichier `api.key`
-> présent dans le dépôt n'est lu par aucune route. En exposition réseau,
-> protégez `/admin/*` en amont (reverse proxy, filtrage IP) ou n'exposez que
-> `localhost`.
+> ⚠️ Cela inclut les routes d'administration : n'importe qui pouvant joindre le
+> service peut **ajouter, lister ou effacer** la base documentaire de n'importe
+> quelle organisation. Le fichier `api.key` présent dans le dépôt n'est lu par
+> aucune route. En exposition réseau, protégez `/admin/*` en amont (reverse
+> proxy, filtrage IP) ou n'exposez que `localhost`.
+>
+> **Conséquence pour le multi-tenant** : l'`organization_id` est une clé de
+> routage, pas une frontière de sécurité. L'isolation des bases empêche une
+> réponse de citer le document d'une autre structure ; elle n'empêche pas un
+> appelant de se présenter comme la structure de son choix. La frontière, c'est
+> le réseau.
 
 ---
 
@@ -173,10 +198,35 @@ data: {
   "qr_code":      "iVBORw0KGgo...",                // PNG base64, procédures seulement
   "audio_url":    "/static/response_ab12cd34.wav", // null si tts=false
   "lang":         "wo",
+  "sources":      [ ... ],                         // traçabilité RAG, voir plus bas
   "memory":       {"count": 4, "max": 10, "reset": false},
   "trace":        { ... }
 }
 ```
+
+### `result.sources` — quels documents ont nourri la réponse
+
+```json
+"sources": [
+  {"document_id": "d4c1f0a2-8e35-4b77-9a10-5f3c2e8b1d69",
+   "title": "Demande de copie de dossier médical", "category": "procedure",
+   "chunk_id": "doc-3b5f134a2c8e9d01", "rank": 1, "score": 7.42}
+]
+```
+
+`document_id` est **l'identifiant fourni à l'ingestion** : c'est la clé de
+jointure avec la base de l'appelant. `chunk_id` identifie un fragment de 512
+caractères et change à chaque réindexation — il sert au débogage, pas à la
+jointure.
+
+`score` est la sortie brute du cross-encoder : **non bornée, souvent négative,
+non comparable d'une question à l'autre**. Elle ordonne, elle ne note pas. Pour
+afficher une pertinence à un usager, utilisez `rank`.
+
+La liste est **vide** quand l'organisation n'a aucun document ou qu'aucun
+passage n'est pertinent — cas normal, fréquent sur une structure qui vient
+d'être créée. Un même `document_id` peut y figurer deux fois si deux de ses
+fragments ont été retenus.
 
 `memory.reset` à `true` signifie que l'historique **vient d'être vidé** : la
 question suivante ne bénéficiera plus du contexte. Prévenez l'usager, sinon ses
@@ -210,7 +260,8 @@ data: {}
   "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2",
   "device": {"torch": "2.11.0", "cuda": false, "mps": true, "auto": "mps",
              "par_composant": {"nllb": "mps", "tts": "mps"}},
-  "n_documents": 2, "n_chunks": 32,
+  "organizations": {"total": 12, "chargees": 3},
+  "storage": {"configure": true, "joignable": true},
   "memory": {"enabled": true, "max_messages": 10, "sessions": 3}
 }
 ```
@@ -222,6 +273,15 @@ lieu d'une réponse rédigée.
 `device.auto` est la première chose à regarder si le service paraît lent : un
 repli silencieux sur `cpu` triple les temps.
 
+`organizations.total` compte les bases présentes sur le disque, `chargees`
+celles actuellement en mémoire (cache LRU, plafonné par
+`MAX_ORGANISATIONS_EN_CACHE`). Les comptages de documents sont désormais propres
+à chaque organisation : voir `GET /admin/organizations`.
+
+`storage` décrit l'accès au stockage objet. `{"configure": false}` signifie que
+l'ingestion par pointeur est indisponible ; l'ingestion directe, elle, continue
+de fonctionner.
+
 ---
 
 ### `POST /ask` — question écrite
@@ -231,6 +291,7 @@ repli silencieux sur `cpu` triple les temps.
 | Champ | Type | Requis | Défaut | Description |
 |---|---|---|---|---|
 | `question` | string | **oui** | — | en wolof ou en français |
+| `organization_id` | UUID | **oui** | — | base de connaissances interrogée — `400` si absent ou mal formé |
 | `provider` | string | non | `.env` | `groq` \| `gemini` \| `local` |
 | `tts` | bool | non | `false` | produire aussi l'audio |
 | `lang` | string | non | `null` | `wo` \| `fr` — **sinon détection automatique sur le texte** |
@@ -242,7 +303,8 @@ travaille sur du texte, où elle est fiable.
 ```bash
 curl -N -X POST http://localhost:8008/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"Comment obtenir une copie de mon dossier médical ?","tts":false}'
+  -d '{"question":"Comment obtenir une copie de mon dossier médical ?",
+       "organization_id":"9b7d1e44-2c08-4a17-b3f5-6e2d9c447a10","tts":false}'
 ```
 
 ---
@@ -254,6 +316,7 @@ curl -N -X POST http://localhost:8008/ask \
 | Champ | Type | Requis | Défaut | Description |
 |---|---|---|---|---|
 | `file` | fichier | **oui** | — | WAV, MP3, M4A, WebM |
+| `organization_id` | UUID | **oui** | — | base de connaissances interrogée |
 | `lang` | string | non | `wo` | **choisit le moteur STT** — voir ci-dessous |
 | `tts` | bool | non | `false` | produire aussi l'audio |
 | `provider` | string | non | `.env` | `groq` \| `gemini` \| `local` |
@@ -269,7 +332,8 @@ curl -N -X POST http://localhost:8008/ask \
 
 ```bash
 curl -N -X POST http://localhost:8008/ask/audio \
-  -F "file=@question.webm" -F "lang=fr" -F "tts=true"
+  -F "file=@question.webm" -F "lang=fr" -F "tts=true" \
+  -F "organization_id=9b7d1e44-2c08-4a17-b3f5-6e2d9c447a10"
 ```
 
 ---
@@ -328,22 +392,75 @@ Ces fichiers ne sont jamais purgés automatiquement : une réponse en produit N+
 
 Aucune authentification — voir l'avertissement en tête de document.
 
+Toutes ces routes sont **scopées par organisation**, et l'`organization_id` est
+dans le **chemin**. Ce n'est pas cosmétique : un segment oublié donne un `404`,
+là où un champ de corps oublié donnerait une opération silencieusement globale.
+
 | Endpoint | Corps | Réponse |
 |---|---|---|
-| `POST /admin/documents` | `file` (txt/md/pdf) **ou** `text`, plus `title` optionnel | `{ok, chunks, title}` |
-| `GET /admin/documents` | — | `{documents: [{id, title, source, chunks, added}], total_chunks}` |
-| `DELETE /admin/documents/{document_id}` | — | `{ok, deleted_chunks}` · `404` si inconnu |
-| `POST /admin/documents/clear` | — | `{ok, deleted_chunks}` — **efface tout** |
+| `POST /admin/organizations/{org}/documents/from-storage` | JSON `{documentId, bucket, objectKey, title?, category?}` | `{ok, document_id, organization_id, title, category, chunks, replaced, added}` |
+| `POST /admin/organizations/{org}/documents` | `file` (txt/md/pdf) **ou** `text`, plus `title`, `document_id`, `category` optionnels | idem |
+| `GET /admin/organizations/{org}/documents` | — | `{organization_id, documents: [{id, title, source, category, chunks, added}], total_documents, total_chunks}` |
+| `DELETE /admin/organizations/{org}/documents/{document_id}` | — | `{ok, organization_id, deleted_chunks}` · `404` si inconnu |
+| `POST /admin/organizations/{org}/documents/clear` | — | `{ok, organization_id, deleted_chunks}` — efface **cette** organisation |
+| `GET /admin/organizations` | — | `{organizations: [...], total, chargees}` |
+| `DELETE /admin/organizations/{org}` | — | `{ok, deleted_documents, deleted_chunks}` — **supprime la base, répertoire compris** |
 
 À l'ingestion, le document est découpé en fragments de 512 caractères avec 80 de
-recouvrement, enrichi de métadonnées, encodé et indexé.
+recouvrement, enrichi de métadonnées, encodé et indexé dans la base de cette
+organisation — et d'aucune autre.
+
+#### L'identifiant du document
+
+`document_id` est **fourni par l'appelant** et conservé tel quel. Réutiliser le
+même identifiant **remplace intégralement** le document : les fragments existants
+sont supprimés, puis les nouveaux insérés. `replaced` dans la réponse dit si un
+document a effectivement été remplacé.
+
+Ce remplacement ne peut pas reposer sur la seule idempotence de l'indexation :
+l'identifiant d'un fragment dérive de son texte, donc un contenu modifié produit
+de nouveaux fragments qui s'ajouteraient **à côté** des anciens. La suppression
+préalable est ce qui évite deux versions contradictoires de la même démarche
+dans l'index.
+
+L'opération n'est pas atomique : il existe une fenêtre de quelques secondes
+pendant laquelle le document est absent de l'index.
+
+Sans `document_id`, un identifiant est dérivé du titre et du début du texte —
+repli destiné aux appels manuels, à ne pas utiliser pour un document qu'on
+republiera.
+
+#### Ingestion par pointeur (MinIO)
 
 ```bash
-curl -X POST http://localhost:8008/admin/documents \
-  -F "file=@procedures.pdf" -F "title=Procédures hospitalières"
+curl -X POST "http://localhost:8008/admin/organizations/$ORG/documents/from-storage" \
+  -H "Content-Type: application/json" \
+  -d '{"documentId":"d4c1f0a2-8e35-4b77-9a10-5f3c2e8b1d69",
+       "bucket":"tontuma-documents",
+       "objectKey":"'"$ORG"'/dossier-medical-v3.pdf",
+       "title":"Dossier médical","category":"procedure"}'
 ```
 
----
+Le service lit l'objet en **lecture seule** et ne lui écrit jamais. Nécessite
+`S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` et `S3_PATH_STYLE_ACCESS=true`
+(obligatoire pour MinIO). Non configuré → `500` ; configuré mais injoignable →
+`502`.
+
+#### Ingestion directe
+
+```bash
+curl -X POST "http://localhost:8008/admin/organizations/$ORG/documents" \
+  -F "file=@procedures.pdf" -F "title=Procédures hospitalières" \
+  -F "document_id=d4c1f0a2-8e35-4b77-9a10-5f3c2e8b1d69" -F "category=procedure"
+```
+
+#### Isolation
+
+Une organisation est créée à la première ingestion ; **les lectures n'en créent
+aucune**. Sa base vit dans `data/chroma/{organization_id}/`, avec un `meta.json`
+qui la décrit (modèle d'embedding, dates, comptages). `DELETE
+/admin/organizations/{org}` efface ce répertoire : il ne reste rien sur le
+disque.
 
 ### `POST /eval/ragas` — évaluation
 
@@ -399,7 +516,8 @@ reste : comptez environ deux secondes par seconde d'audio produit.
 const res = await fetch('/ask', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ question, tts: true, session_id: sessionId }),
+  body: JSON.stringify({ question, organization_id: organizationId,
+                         tts: true, session_id: sessionId }),
 });
 
 const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -428,7 +546,8 @@ facultatif : un événement peut arriver coupé en deux lectures.
 ```java
 webClient.post().uri("/ask")
     .contentType(MediaType.APPLICATION_JSON)
-    .bodyValue(Map.of("question", question, "tts", true, "session_id", sessionId))
+    .bodyValue(Map.of("question", question, "organization_id", organizationId,
+                      "tts", true, "session_id", sessionId))
     .retrieve()
     .bodyToFlux(ServerSentEvent.class)
     .doOnNext(ev -> {
@@ -442,7 +561,7 @@ webClient.post().uri("/ask")
 ```bash
 curl -N -X POST http://localhost:8008/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"Test","tts":false}'
+  -d '{"question":"Test","organization_id":"9b7d1e44-2c08-4a17-b3f5-6e2d9c447a10","tts":false}'
 ```
 
 `-N` désactive la mise en tampon de curl, sans quoi le flux n'apparaît qu'à la fin.
@@ -454,9 +573,11 @@ curl -N -X POST http://localhost:8008/ask \
 | Code | Quand |
 |---|---|
 | `200` | y compris pour un flux qui se terminera par `event: error` |
-| `400` | question vide, format de fichier refusé, texte vide à l'ingestion |
-| `404` | document inconnu à la suppression |
-| `500` | erreur interne d'ingestion |
+| `400` | question vide, `organization_id` absent ou mal formé, format refusé, texte vide, PDF sans texte extractible, PDF illisible |
+| `404` | document inconnu à la suppression, organisation inconnue à la suppression, objet introuvable sur le stockage |
+| `409` | l'index a été construit avec un autre `EMBED_MODEL` — **aucune donnée n'est touchée**, une réindexation est requise |
+| `500` | erreur interne d'ingestion, ou stockage objet non configuré |
+| `502` | stockage objet configuré mais injoignable |
 
 **Une erreur de pipeline n'est pas un code HTTP.** Le flux ayant déjà commencé
 avec un `200`, l'échec arrive dans `event: error` puis `event: done`. Traitez

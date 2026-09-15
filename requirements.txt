@@ -21,7 +21,15 @@ librosa>=0.10.2       # chargement audio multi-format
 # ── RAG ───────────────────────────────────────────────────────────────────────
 rank-bm25
 sentence-transformers
-chromadb
+# Épinglé : chaque organisation a sa base sur le disque. Une montée de version
+# majeure au prochain `pip install` peut rendre illisibles tous les index des
+# clients en même temps — ce n'est plus une base de démonstration.
+chromadb==1.5.9
+
+# Lecture du stockage objet MinIO (ingestion par pointeur bucket + objectKey).
+# Facultatif : sans lui, seule l'ingestion directe multipart fonctionne, et le
+# service démarre normalement.
+boto3
 pypdf
 
 # ── Reranker ──────────────────────────────────────────────────────────────────

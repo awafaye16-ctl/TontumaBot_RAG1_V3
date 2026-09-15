@@ -35,6 +35,7 @@ from seed_docs import get_documents
 import memory
 import vectorstore
 import ingestion
+import storage
 
 
 # =============================================================================
@@ -61,9 +62,26 @@ def _warmup() -> None:
             # rechargé à la demande, ou le composant restera indisponible.
             log.warning("%-12s ignoré : %s", name, e)
 
-    # Embedder + cache du corpus (index BM25 + embeddings)
+    # Embedder — partagé par toutes les organisations
     _step("embedder", vectorstore.get_embedder)
-    _step("corpus/bm25", vectorstore._get_corpus)
+
+    # Corpus des organisations déjà présentes sur le disque. Le premier appel
+    # d'une organisation paie sinon l'ouverture de sa base, le chargement de ses
+    # vecteurs et la construction de son index BM25 — une à trois secondes,
+    # visibles sur une borne tactile.
+    def _corpus():
+        orgs = vectorstore.organisations()[: settings.MAX_ORGANISATIONS_EN_CACHE]
+        total = 0
+        for o in orgs:
+            try:
+                total += vectorstore.prechauffer(o["organization_id"])
+            except Exception as e:  # noqa: BLE001
+                # Une base incompatible ou corrompue ne doit pas empêcher le
+                # service de démarrer pour les autres organisations.
+                log.warning("organisation %s non préchauffée : %s",
+                            o["organization_id"], e)
+        log.info("%d organisation(s) préchauffée(s), %d fragments", len(orgs), total)
+    _step("corpus/bm25", _corpus)
 
     # Prototypes du router d'intention (réutilisent l'embedder ci-dessus)
     def _intent():
@@ -129,7 +147,7 @@ async def lifespan(app: FastAPI):
     demarrage.info("arrêt du serveur")
 
 
-app = FastAPI(title="TontumaBot V3", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="TontumaBot V3", version="3.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -153,11 +171,26 @@ SEED_DOCS, SEED_FILTERED = get_documents()
 # =============================================================================
 
 class AskRequest(BaseModel):
-    question:   str
-    provider:   str | None = None   # groq | gemini | local
-    tts:        bool        = False
-    lang:       str | None = None   # 'wo' | 'fr' — sinon détection automatique
-    session_id: str | None = None   # mémoire conversationnelle de cette session
+    question:        str
+    organization_id: str | None = None  # UUID — base de connaissances interrogée
+    provider:        str | None = None  # groq | gemini | local
+    tts:             bool       = False
+    lang:            str | None = None  # 'wo' | 'fr' — sinon détection automatique
+    session_id:      str | None = None  # mémoire conversationnelle de cette session
+
+
+class DocumentPointeur(BaseModel):
+    """Notification d'ingestion : le fichier est déjà sur le stockage objet.
+
+    Le backend dépose sur MinIO puis envoie ce pointeur ; l'IA va lire l'objet.
+    `documentId` est l'identifiant du backend : le réutiliser republie le même
+    document au lieu d'en empiler une seconde version.
+    """
+    documentId: str
+    bucket:     str
+    objectKey:  str
+    title:      str | None = None
+    category:   str | None = None
 
 
 class RagasRequest(BaseModel):
@@ -196,7 +229,8 @@ def _sse(event: str, data: dict) -> str:
 
 
 async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
-                        lang_hint: str | None = None, session_id: str | None = None):
+                        lang_hint: str | None = None, session_id: str | None = None,
+                        organization_id: str | None = None):
     """Exécute le pipeline (dans un thread) et streame la progression en SSE.
 
     Le pipeline synchrone tourne dans un executor ; ses callbacks `progress`
@@ -225,11 +259,13 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
         # perdrait l'identifiant de la requête, c'est-à-dire l'essentiel.
         with contexte_requete(rid):
             debut = time.perf_counter()
-            log.info("question (%d car.) · provider=%s · tts=%s · langue=%s",
-                     len(question), provider, tts, lang_hint or "à détecter")
+            log.info("question (%d car.) · org=%s · provider=%s · tts=%s · langue=%s",
+                     len(question), organization_id or "-", provider, tts,
+                     lang_hint or "à détecter")
             try:
                 result = pipeline_answer(
                     question,
+                    organization_id = organization_id,
                     provider      = provider,
                     tts           = tts,
                     tts_out       = tts_out,
@@ -285,6 +321,10 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
                 "qr_code":     data.get("qr_code"),
                 "audio_url":   audio_url,
                 "lang":        trace.get("input_lang"),
+                # Traçabilité RAG, au premier niveau : le client n'a pas à
+                # fouiller `trace`, qui est un objet de débogage volumineux et
+                # instable — et qui ne doit pas être relayé au navigateur.
+                "sources":     data.get("sources", []),
                 "memory":      memoire,
                 "trace":       trace,
             })
@@ -303,7 +343,8 @@ async def _pipeline_sse(question: str, provider: str, tts: bool, tts_out: str,
 
 
 async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: str,
-                              lang: str = "wo", session_id: str | None = None):
+                              lang: str = "wo", session_id: str | None = None,
+                              organization_id: str | None = None):
     """Variante audio : STT dans la langue demandée, puis pipeline SSE.
 
     `lang` vient du bouton pressé sur la borne ('wo' ou 'fr') : il choisit le
@@ -326,8 +367,26 @@ async def _audio_pipeline_sse(tmp_path: str, provider: str, tts: bool, tts_out: 
         return
 
     async for chunk in _pipeline_sse(text, provider, tts, tts_out,
-                                     lang_hint=lang, session_id=session_id):
+                                     lang_hint=lang, session_id=session_id,
+                                     organization_id=organization_id):
         yield chunk
+
+
+# =============================================================================
+#  Organisation — validation commune
+# =============================================================================
+
+def _organisation(valeur: str | None) -> str:
+    """Valide l'`organization_id` et retourne sa forme canonique, ou 400.
+
+    Le service n'a aucune authentification : cet identifiant arrive tel quel
+    depuis le réseau et sert ensuite de segment de chemin sur le disque. Il est
+    donc validé ici, en entrée, avant d'atteindre quoi que ce soit.
+    """
+    try:
+        return vectorstore.valider_organisation(valeur)
+    except vectorstore.OrganisationInvalide as e:
+        raise HTTPException(400, str(e)) from None
 
 
 # =============================================================================
@@ -354,6 +413,13 @@ def borne_simple():
 
 @app.get("/admin")
 def admin():
+    """Console d'administration documentaire.
+
+    La page est servie telle quelle : elle demande l'`organization_id` à
+    l'usager et retient le dernier utilisé. Aucun identifiant n'est injecté ici
+    — le service ne connaît pas le registre des organisations, c'est le backend
+    qui le détient.
+    """
     return FileResponse(os.path.join(STATIC_DIR, "admin.html"))
 
 
@@ -361,7 +427,7 @@ def admin():
 def health():
     return {
         "status":       "ok",
-        "version":      "3.0.0",
+        "version":      "3.1.0",
         "llm_provider": settings.LLM_PROVIDER,
         "llm_ready":    settings.llm_ready,
         "tts":          "oolel-voices",
@@ -370,8 +436,13 @@ def health():
         "stt_fr":       settings.STT_FR_MODEL,
         "reranker":     settings.RERANKER_MODEL,
         "device":       device.infos(),
-        "n_documents":  len(vectorstore.all_documents()),
-        "n_chunks":     vectorstore.count(),
+        # Les comptages sont désormais propres à chaque organisation : un total
+        # global n'aurait aucun sens, et laisserait croire à une base partagée.
+        "organizations": {
+            "total":    len(vectorstore.organisations()),
+            "chargees": vectorstore.organisations_chargees(),
+        },
+        "storage":      storage.sante(),
         "memory": {
             "enabled":      settings.MEMORY_ENABLED,
             "max_messages": settings.MEMORY_MAX_MESSAGES,
@@ -394,11 +465,13 @@ async def ask(req: AskRequest):
     if not req.question.strip():
         raise HTTPException(400, "Question vide")
 
+    organization_id = _organisation(req.organization_id)
     provider = req.provider or settings.LLM_PROVIDER
     tts_out  = os.path.join(STATIC_DIR, f"response_{uuid.uuid4().hex[:8]}.wav")
     return StreamingResponse(
         _pipeline_sse(req.question.strip(), provider, req.tts, tts_out,
-                      lang_hint=req.lang, session_id=req.session_id),
+                      lang_hint=req.lang, session_id=req.session_id,
+                      organization_id=organization_id),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
@@ -408,11 +481,12 @@ async def ask(req: AskRequest):
 
 @app.post("/ask/audio")
 async def ask_audio(
-    file:       UploadFile     = File(...),
-    tts:        bool           = Form(False),
-    provider:   str | None     = Form(None),
-    lang:       str            = Form("wo"),
-    session_id: str | None     = Form(None),
+    file:            UploadFile = File(...),
+    organization_id: str | None = Form(None),
+    tts:             bool       = Form(False),
+    provider:        str | None = Form(None),
+    lang:            str        = Form("wo"),
+    session_id:      str | None = Form(None),
 ):
     """Audio (WAV, MP3, M4A, WebM) → STT → pipeline RAG → réponse SSE + TTS optionnel.
 
@@ -420,6 +494,8 @@ async def ask_audio(
     (décodage CTC), 'fr' → Whisper (STT_FR_MODEL). Cette même langue est passée
     au pipeline comme indice, la réponse est streamée en SSE.
     """
+    organization_id = _organisation(organization_id)
+
     # Sauvegarde du fichier uploadé
     safe_name = os.path.basename(file.filename or "audio.wav")
     tmp_path  = os.path.join(UPLOAD_DIR, safe_name)
@@ -430,7 +506,8 @@ async def ask_audio(
     tts_out  = os.path.join(STATIC_DIR, f"response_{uuid.uuid4().hex[:8]}.wav")
     return StreamingResponse(
         _audio_pipeline_sse(tmp_path, provider, tts, tts_out, lang=lang,
-                            session_id=session_id),
+                            session_id=session_id,
+                            organization_id=organization_id),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
@@ -489,21 +566,115 @@ def translate_test(
 #  montage /static. La réponse SSE renvoie son URL dans le champ `audio_url`.
 
 
-# ── Admin RAG ─────────────────────────────────────────────────────────────
+# ── Admin RAG — scopé par organisation ────────────────────────────────────
+#
+#  L'`organization_id` est dans le CHEMIN, pas dans le corps. Ce n'est pas
+#  cosmétique : un segment de chemin oublié donne un 404, alors qu'un champ de
+#  corps oublié donnerait une opération silencieusement globale. Sur une API
+#  sans authentification, la différence entre un 404 et « effacer les documents
+#  de tous les clients » vaut la verbosité de l'URL.
 
-@app.post("/admin/documents")
-async def add_document(
-    file:  UploadFile | None = File(None),
-    text:  str | None        = Form(None),
-    title: str | None        = Form(None),
-):
-    """Ingère un document (TXT, MD, PDF) ou du texte brut dans ChromaDB.
+def _resultat_ingestion(org: str, r: dict) -> dict:
+    return {
+        "ok":              True,
+        "document_id":     r["document_id"],
+        "organization_id": org,
+        "title":           r["title"],
+        "category":        r.get("category"),
+        "chunks":          r["chunks"],
+        "replaced":        r["replaced"],
+        "added":           r["added"],
+    }
 
-    Le document est automatiquement :
-      - découpé en chunks sémantiques (512 chars, overlap 80)
-      - enrichi de métadonnées (document_id, titre, source, index, nb_mots, date)
-      - encodé en embeddings et indexé dans ChromaDB
+
+@app.post("/admin/organizations/{organization_id}/documents/from-storage")
+async def add_document_from_storage(organization_id: str, ptr: DocumentPointeur):
+    """Ingère un document déjà déposé sur le stockage objet (MinIO).
+
+    Voie recommandée : le backend dépose le fichier puis notifie l'IA avec un
+    pointeur (bucket + objectKey). L'IA télécharge l'objet, l'indexe, et rend
+    l'identifiant du document.
+
+    Rejouer cet appel est sans danger : le remplacement par `documentId` rend
+    l'opération idempotente — un appel répété produit le même état final, pas
+    des doublons.
     """
+    org = _organisation(organization_id)
+    if not ptr.documentId.strip():
+        raise HTTPException(400, "documentId requis")
+
+    loop = asyncio.get_running_loop()
+    try:
+        chemin = await loop.run_in_executor(
+            None, lambda: storage.telecharger(ptr.bucket, ptr.objectKey, UPLOAD_DIR)
+        )
+    except storage.ObjetIntrouvable as e:
+        raise HTTPException(404, str(e)) from None
+    except (storage.ObjetTropVolumineux, ValueError) as e:
+        raise HTTPException(400, str(e)) from None
+    except storage.StockageNonConfigure as e:
+        # 500 et pas 502 : rejouer n'y changera rien, c'est un défaut de
+        # déploiement côté IA. Le backend doit alerter, pas réessayer en boucle.
+        raise HTTPException(500, str(e)) from None
+    except storage.StockageIndisponible as e:
+        # 502 : la panne est en aval, chez le stockage. C'est ce qui dit au
+        # backend de rejouer avec backoff plutôt que d'alerter.
+        raise HTTPException(502, str(e)) from None
+
+    try:
+        r = await loop.run_in_executor(None, lambda: ingestion.ingest_file(
+            org, chemin,
+            title       = ptr.title or os.path.basename(ptr.objectKey),
+            document_id = ptr.documentId.strip(),
+            category    = ptr.category,
+            source      = ptr.objectKey,      # la provenance réelle, pas le fichier temporaire
+        ))
+    except ingestion.ExtractionImpossible as e:
+        raise HTTPException(400, str(e)) from None
+    except vectorstore.IndexIncompatible as e:
+        raise HTTPException(409, str(e)) from None
+    except RuntimeError as e:
+        raise HTTPException(500, str(e)) from None
+    finally:
+        # Le fichier téléchargé ne sert qu'à l'extraction : le garder ferait
+        # grossir uploads/ d'une copie de chaque document ingéré.
+        try:
+            os.unlink(chemin)
+        except OSError:
+            pass
+
+    if r["chunks"] == 0:
+        # Cas le plus fréquent en production : un PDF scanné, donc une image.
+        # Le message doit permettre à l'agent qui a déposé le fichier de
+        # comprendre ça, et pas de conclure que « ça a planté ».
+        raise HTTPException(
+            400,
+            "Aucun texte exploitable dans ce fichier. S'il s'agit d'un PDF "
+            "scanné (une image), il doit d'abord passer par une reconnaissance "
+            "de caractères."
+        )
+    return _resultat_ingestion(org, r)
+
+
+@app.post("/admin/organizations/{organization_id}/documents")
+async def add_document(
+    organization_id: str,
+    file:        UploadFile | None = File(None),
+    text:        str | None        = Form(None),
+    title:       str | None        = Form(None),
+    document_id: str | None        = Form(None),
+    category:    str | None        = Form(None),
+):
+    """Ingestion directe d'un document (TXT, MD, PDF) ou de texte brut.
+
+    Conservée pour les tests et les petits contenus ; la voie normale en
+    production est `from-storage`.
+
+    Le document est découpé en fragments sémantiques (512 caractères, 80 de
+    recouvrement), enrichi de métadonnées, encodé et indexé dans la base de
+    CETTE organisation.
+    """
+    org = _organisation(organization_id)
     if file is None and (text is None or not text.strip()):
         raise HTTPException(400, "Fournissez un fichier ou du texte")
 
@@ -519,41 +690,90 @@ async def add_document(
             f.write(await file.read())
 
         try:
-            n = ingestion.ingest_file(path, title=title)
+            r = ingestion.ingest_file(org, path, title=title,
+                                      document_id=document_id, category=category)
+        except ingestion.ExtractionImpossible as e:
+            raise HTTPException(400, str(e))
+        except vectorstore.IndexIncompatible as e:
+            raise HTTPException(409, str(e))
         except RuntimeError as e:
             raise HTTPException(500, str(e))
 
-        if n == 0:
+        if r["chunks"] == 0:
             raise HTTPException(400, "Aucun texte exploitable dans ce fichier")
-        return {"ok": True, "chunks": n, "title": title or safe_name}
+        return _resultat_ingestion(org, r)
 
     # Texte brut
-    n = ingestion.ingest_text(text, title or "Document manuel")
-    if n == 0:
+    try:
+        r = ingestion.ingest_text(org, text, title or "Document manuel",
+                                  document_id=document_id, category=category)
+    except vectorstore.IndexIncompatible as e:
+        raise HTTPException(409, str(e))
+    if r["chunks"] == 0:
         raise HTTPException(400, "Texte vide")
-    return {"ok": True, "chunks": n, "title": title or "Document manuel"}
+    return _resultat_ingestion(org, r)
 
 
-@app.get("/admin/documents")
-def list_documents():
+@app.get("/admin/organizations/{organization_id}/documents")
+def list_documents(organization_id: str):
+    """Documents de cette organisation.
+
+    Une organisation inconnue renvoie une liste vide, PAS un 404 : elle n'existe
+    simplement pas encore, et sa base sera créée au premier document ingéré.
+    """
+    org = _organisation(organization_id)
+    try:
+        documents = vectorstore.all_documents(org)
+        total     = vectorstore.count(org)
+    except vectorstore.IndexIncompatible as e:
+        raise HTTPException(409, str(e)) from None
     return {
-        "documents":    vectorstore.all_documents(),
-        "total_chunks": vectorstore.count(),
+        "organization_id": org,
+        "documents":       documents,
+        "total_documents": len(documents),
+        "total_chunks":    total,
     }
 
 
-@app.delete("/admin/documents/{document_id}")
-def remove_document(document_id: str):
-    n = vectorstore.delete_document(document_id)
+@app.delete("/admin/organizations/{organization_id}/documents/{document_id}")
+def remove_document(organization_id: str, document_id: str):
+    org = _organisation(organization_id)
+    n   = vectorstore.delete_document(org, document_id)
     if n == 0:
-        raise HTTPException(404, "Document introuvable")
-    return {"ok": True, "deleted_chunks": n}
+        raise HTTPException(404, "Document introuvable dans cette organisation")
+    return {"ok": True, "organization_id": org, "deleted_chunks": n}
 
 
-@app.post("/admin/documents/clear")
-def clear_documents():
-    n = vectorstore.clear_all()
-    return {"ok": True, "deleted_chunks": n}
+@app.post("/admin/organizations/{organization_id}/documents/clear")
+def clear_documents(organization_id: str):
+    """Efface tous les documents de CETTE organisation. Les autres sont intactes."""
+    org = _organisation(organization_id)
+    n   = vectorstore.clear_all(org)
+    return {"ok": True, "organization_id": org, "deleted_chunks": n}
+
+
+@app.get("/admin/organizations")
+def list_organizations():
+    """Organisations présentes sur le disque — exploitation et supervision."""
+    orgs = vectorstore.organisations()
+    return {"organizations": orgs, "total": len(orgs),
+            "chargees": vectorstore.organisations_chargees()}
+
+
+@app.delete("/admin/organizations/{organization_id}")
+def remove_organization(organization_id: str):
+    """Supprime la base d'une organisation, répertoire compris. IRRÉVERSIBLE.
+
+    À câbler sur la résiliation d'un client : c'est la garantie d'effacement qui
+    se démontre — il ne reste rien sur le disque, pas des lignes filtrées.
+    """
+    org = _organisation(organization_id)
+    r   = vectorstore.delete_organization(org)
+    if not r["existed"]:
+        raise HTTPException(404, "Organisation inconnue")
+    return {"ok": True, "organization_id": org,
+            "deleted_documents": r["deleted_documents"],
+            "deleted_chunks":    r["deleted_chunks"]}
 
 
 # ── Évaluation RAGAS ─────────────────────────────────────────────────────

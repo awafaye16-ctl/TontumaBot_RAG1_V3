@@ -43,6 +43,9 @@ from pathlib import Path
 #  faire. Sans elle, deux requêtes simultanées mélangeraient leurs traces.
 _requete: contextvars.ContextVar[str] = contextvars.ContextVar("requete", default="----")
 
+# Derniers segments de nom qui ne désignent pas un composant mais une catégorie.
+_SEGMENTS_GENERIQUES = {"error", "access", "main", "core", "utils"}
+
 _NIVEAUX = {"DEBUG": logging.DEBUG, "INFO": logging.INFO,
             "WARNING": logging.WARNING, "ERROR": logging.ERROR}
 
@@ -62,6 +65,9 @@ _BAVARDES = {
     "groq": logging.WARNING,
     "asyncio": logging.WARNING,
     "datasets": logging.WARNING,
+    # Journal interne du décodeur : « EOS token detected » à chaque synthèse.
+    # Utile en DEBUG, bruit sinon.
+    "t3": logging.WARNING,
     "huggingface_hub": logging.WARNING,
     "numba": logging.WARNING,
 }
@@ -80,10 +86,28 @@ class _Filtre(logging.Filter):
     """Attache l'identifiant de requête courant à chaque enregistrement."""
 
     def filter(self, record: logging.LogRecord) -> bool:
+        # Certaines bibliothèques journalisent par `logging.info(...)` au niveau
+        # module, donc directement sur le logger racine — « input frame rate=25 »
+        # au chargement du vocodeur. On ne peut pas les museler par leur nom
+        # sans museler le projet entier : `logging.getLogger("root")` RETOURNE
+        # le logger racine, et le baisser coupe toute la journalisation. On
+        # écarte donc ces enregistrements ici, sauf en DEBUG où l'on veut tout.
+        if record.name == "root" and record.levelno < logging.WARNING:
+            if logging.getLogger().level > logging.DEBUG:
+                return False
+
         record.requete = _requete.get()
         # Le nom complet ('tts_Ooleil.tts') tiendrait toute la colonne : on ne
         # garde que le dernier segment, qui est celui qu'on cherche des yeux.
-        record.composant = record.name.rsplit(".", 1)[-1][:12]
+        #
+        # Sauf quand ce segment est générique : uvicorn journalise son démarrage
+        # sous 'uvicorn.error', ce qui affichait « error » en face de « Started
+        # server process » — un démarrage normal avait l'air d'une panne.
+        parts = record.name.split(".")
+        nom = parts[-1]
+        if nom in _SEGMENTS_GENERIQUES and len(parts) > 1:
+            nom = parts[-2]
+        record.composant = nom[:12]
         return True
 
 

@@ -28,6 +28,13 @@ os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("USE_TORCH", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")   # évite les warnings HF
 
+# transformers réinstalle son propre niveau de journal à l'import, en attachant
+# un gestionnaire qui ne propage pas : régler `logging.getLogger("transformers")`
+# depuis src/journal.py ne tient pas, et ses avertissements ressortaient sans
+# horodatage ni niveau (« We detected that you are passing `past_key_values`… »).
+# Sa variable d'environnement, elle, est lue au moment où il se configure.
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
 
@@ -173,6 +180,64 @@ class Settings:
         "EMBED_MODEL",
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
+
+    # ── Multi-tenant ──────────────────────────────────────────────────────
+    # Chaque organisation (mairie, hôpital, préfecture) possède sa PROPRE base
+    # vectorielle, dans son propre répertoire sous CHROMA_ROOT. L'isolation est
+    # donc structurelle : une recherche dans la base A ne peut pas atteindre un
+    # document de B, même si un filtre est oublié quelque part.
+    #
+    # Le filtre de métadonnées sur index unique a été écarté : la recherche
+    # hybride travaille sur un cache mémoire (index BM25 + matrice d'embeddings)
+    # et ne passe pas par le moteur de requête de ChromaDB — un `where` n'y a
+    # aucun effet, et il aurait fallu réimplémenter le filtrage sur chaque
+    # chemin, où un seul oubli donne une fuite silencieuse entre clients.
+    CHROMA_ROOT = os.getenv("CHROMA_ROOT", str(BASE_DIR / "data" / "chroma"))
+
+    # Organisation utilisée par les OUTILS INTERNES (benchmark, évaluation,
+    # ingestion en ligne de commande), qui travaillent sur une base unique.
+    # L'API, elle, n'a aucun défaut : elle exige toujours un organization_id
+    # explicite — un défaut y ferait taire la seule erreur qui protège du
+    # mélange entre clients.
+    ORGANISATION_OUTILS = os.getenv(
+        "ORGANISATION_OUTILS", "00000000-0000-4000-8000-000000000001"
+    )
+
+    # Bases tenues ouvertes simultanément. Chaque organisation chargée coûte une
+    # connexion SQLite, un index HNSW, un index BM25 et sa matrice d'embeddings
+    # (~5 Mo pour 1 000 fragments en 384 dimensions). Au-delà de ce plafond, la
+    # moins récemment utilisée est fermée ; elle se rouvrira à la demande.
+    MAX_ORGANISATIONS_EN_CACHE = int(os.getenv("MAX_ORGANISATIONS_EN_CACHE", "20"))
+
+    # Repli sur les documents de démonstration (data/seed_docs.py) quand une
+    # organisation n'a aucun document indexé.
+    #
+    # Par défaut DÉSACTIVÉ, et ça n'est pas un détail : en multi-tenant, ce
+    # repli ferait répondre une structure fraîchement créée avec les procédures
+    # génériques du jeu de démonstration, présentées comme les siennes. À
+    # n'activer que sur un poste de démonstration mono-organisation.
+    SEED_FALLBACK = _env_bool("SEED_FALLBACK", False)
+
+    # ── Stockage objet (MinIO / S3) ───────────────────────────────────────
+    # Le backend dépose le fichier sur MinIO puis notifie l'IA avec un pointeur
+    # (bucket + objectKey) ; l'IA lit l'objet et l'indexe. Accès LECTURE SEULE :
+    # l'IA n'écrit jamais sur le stockage objet.
+    S3_ENDPOINT   = os.getenv("S3_ENDPOINT", "")
+    S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
+    S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
+    S3_REGION     = os.getenv("S3_REGION", "us-east-1")
+
+    # MinIO ne sert PAS l'adressage par sous-domaine (bucket.hôte/objet) que les
+    # clients S3 utilisent par défaut. Sans ce réglage, tous les téléchargements
+    # échouent en résolution DNS — avec un message qui ne désigne pas la cause.
+    S3_PATH_STYLE_ACCESS = _env_bool("S3_PATH_STYLE_ACCESS", True)
+
+    # Plafond de taille d'un objet téléchargé, en mégaoctets.
+    S3_MAX_MB = int(os.getenv("S3_MAX_MB", "50"))
+
+    @property
+    def s3_ready(self) -> bool:
+        return bool(self.S3_ENDPOINT and self.S3_ACCESS_KEY and self.S3_SECRET_KEY)
 
     # ── TTS ───────────────────────────────────────────────────────────────
     OOLEL_TTS_REPO = os.getenv("OOLEL_TTS_REPO", "soynade-research/Oolel-Voices")

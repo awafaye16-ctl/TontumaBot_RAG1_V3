@@ -67,7 +67,7 @@ Règles :
 
 def corpus_numerote() -> tuple[str, list[str]]:
     """Le corpus entier en texte numéroté, et la table numéro → identifiant."""
-    c = vectorstore._get_corpus()
+    c = vectorstore._get_corpus(settings.ORGANISATION_OUTILS)
     lignes, ids = [], []
     for i, (cid, texte, meta) in enumerate(zip(c["ids"], c["texts"], c["metas"]), 1):
         ids.append(cid)

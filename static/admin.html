@@ -441,7 +441,16 @@
             <div class="logo">T</div>
             <div>
                 <h1>TontumaBot V3 — Admin RAG</h1>
-                <div class="sub">Gérez la base documentaire qui alimente le RAG</div>
+                <div class="sub">
+                    Base documentaire de l'organisation
+                    <input type="text" id="org-input" spellcheck="false"
+                           placeholder="organization_id (UUID)"
+                           style="font:inherit;font-family:ui-monospace,monospace;font-size:12px;
+                                  padding:3px 7px;margin-left:6px;width:22em;border-radius:4px;
+                                  border:1px solid rgba(128,128,128,.4);background:transparent;
+                                  color:inherit">
+                    <span id="org-etat" style="font-size:12px;margin-left:6px;opacity:.7"></span>
+                </div>
             </div>
             <div class="hright">
                 <div class="stats">
@@ -524,6 +533,32 @@
         const $ = id => document.getElementById(id);
         const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+        /* ── Organisation courante ──────────────────────────────────── */
+        /* Chaque organisation a sa propre base : toutes les routes d'admin sont
+           scopées. L'UUID est retenu d'une visite à l'autre pour ne pas avoir à
+           le recoller, mais il reste modifiable — c'est la même console qui sert
+           à toutes les structures. */
+        const ORG_DEFAUT = document.body.dataset.orgDefaut || '';
+        const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        function org() {
+            return ($('org-input').value || '').trim();
+        }
+        function orgValide() {
+            return RE_UUID.test(org());
+        }
+        function api(suffixe = '') {
+            return '/admin/organizations/' + encodeURIComponent(org()) + '/documents' + suffixe;
+        }
+        function majEtatOrg() {
+            const el = $('org-etat');
+            if (!org())            { el.textContent = '— saisissez un UUID'; return false; }
+            if (!orgValide())      { el.textContent = '— UUID invalide';     return false; }
+            el.textContent = '';
+            try { localStorage.setItem('tontuma_org', org()); } catch (e) {}
+            return true;
+        }
+
         /* ── Toast ──────────────────────────────────────────────────── */
         function toast(msg, dur = 3500) {
             const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -533,7 +568,14 @@
         /* ── Stats ──────────────────────────────────────────────────── */
         async function refresh() {
             try {
-                const res = await fetch('/admin/documents');
+                if (!majEtatOrg()) {
+                    $('stat-docs').textContent = '—';
+                    $('stat-chunks').textContent = '—';
+                    $('doc-list').innerHTML = '';
+                    $('empty').style.display = '';
+                    return;
+                }
+                const res = await fetch(api());
                 const data = await res.json();
                 $('stat-docs').textContent = data.documents.length;
                 $('stat-chunks').textContent = data.total_chunks;
@@ -555,7 +597,7 @@
         <button class="del" title="Supprimer ce document">🗑</button>`;
                     div.querySelector('.del').addEventListener('click', async () => {
                         if (!confirm(`Supprimer « ${d.title} » ?`)) return;
-                        const r = await fetch('/admin/documents/' + encodeURIComponent(d.id), { method: 'DELETE' });
+                        const r = await fetch(api('/' + encodeURIComponent(d.id)), { method: 'DELETE' });
                         if (r.ok) { toast('✅ Document supprimé'); refresh(); }
                         else toast('❌ Erreur suppression');
                     });
@@ -668,7 +710,7 @@
                 fd.append('title', f.name.replace(/\.[^/.]+$/, ''));  // titre = nom sans extension
 
                 try {
-                    const r = await fetch('/admin/documents', { method: 'POST', body: fd });
+                    const r = await fetch(api(), { method: 'POST', body: fd });
                     const d = await r.json();
                     if (!r.ok) throw new Error(d.detail || 'Erreur serveur');
                     statusEl.textContent = `✅ ${d.chunks} chunks`;
@@ -706,7 +748,7 @@
             fd.append('title', title || 'Document manuel');
 
             try {
-                const r = await fetch('/admin/documents', { method: 'POST', body: fd });
+                const r = await fetch(api(), { method: 'POST', body: fd });
                 const d = await r.json();
                 if (!r.ok) throw new Error(d.detail || 'Erreur');
                 toast(`✅ ${d.chunks} chunks indexés — « ${d.title} »`);
@@ -722,14 +764,30 @@
 
         /* ── Vider toute la base ────────────────────────────────────── */
         $('btn-clear-all').addEventListener('click', async () => {
-            if (!confirm('Supprimer TOUS les documents de la base vectorielle ?')) return;
-            const r = await fetch('/admin/documents/clear', { method: 'POST' });
+            if (!majEtatOrg()) { toast('Renseignez un organization_id valide'); return; }
+            // Le message nomme l'organisation : sur une console qui sert à
+            // toutes les structures, « vider la base » sans dire laquelle est
+            // une erreur qui se paie cher.
+            if (!confirm(`Supprimer TOUS les documents de l'organisation\n${org()} ?`)) return;
+            const r = await fetch(api('/clear'), { method: 'POST' });
             const d = await r.json();
             toast(`🗑 Base vidée (${d.deleted_chunks} chunks supprimés)`);
             refresh();
         });
 
         /* ── Init ────────────────────────────────────────────────────── */
+        (function initOrganisation() {
+            let initial = '';
+            try { initial = localStorage.getItem('tontuma_org') || ''; } catch (e) {}
+            $('org-input').value = initial || ORG_DEFAUT;
+
+            let differe = null;
+            $('org-input').addEventListener('input', () => {
+                clearTimeout(differe);
+                differe = setTimeout(refresh, 300);
+            });
+        })();
+
         refresh();
     </script>
 </body>

@@ -39,6 +39,7 @@ import base64
 from io import BytesIO
 from typing import Callable, Optional
 
+from config import settings
 import vectorstore
 from language.detector import detect_language, contredit
 from translation.nllb import wolof_to_french, french_to_wolof
@@ -157,22 +158,24 @@ def _strip_markdown(text: str) -> str:
 # =============================================================================
 
 def _rag_pipeline(
+    organization_id: str,
     question_fr: str,
     intent: str,
     fetch_k: int  = 20,
     mmr_k: int    = 8,
     top_k: int    = 3,
     query_embedding: Optional[list[float]] = None,
-) -> tuple[str, dict]:
-    """Exécute les 3 étapes du retrieval et retourne (contexte_fr, retrieval_trace).
+) -> tuple[str, dict, list[dict]]:
+    """Exécute les 3 étapes du retrieval DANS LA BASE DE L'ORGANISATION.
 
     1. Hybrid search (BM25 + vectoriel) → fetch_k candidats
-    2. MMR → mmr_k chunks diversifiés
+    2. MMR → mmr_k fragments diversifiés
     3. Reranker cross-encoder → top_k envoyés au LLM
 
     Returns:
-        contexte_fr    — chaîne de texte des top_k chunks
-        retrieval_trace — dict de traçabilité détaillé
+        contexte_fr     — chaîne de texte des top_k fragments
+        retrieval_trace — dict de traçabilité détaillé (observabilité)
+        sources         — documents ayant nourri la réponse, exposés au client
     """
     t0 = time.perf_counter()
 
@@ -186,7 +189,8 @@ def _rag_pipeline(
 
     # ── Étape 1 : Hybrid search (un seul passage, index BM25 + embeddings cachés)
     t_hybrid_start = time.perf_counter()
-    candidates = vectorstore.hybrid_search(question_fr, k=fetch_k, query_embedding=q_emb)
+    candidates = vectorstore.hybrid_search(organization_id, question_fr, k=fetch_k,
+                                           query_embedding=q_emb)
     t_hybrid   = round((time.perf_counter() - t_hybrid_start) * 1000, 1)
 
     if not candidates:
@@ -194,11 +198,12 @@ def _rag_pipeline(
             "n_candidates": 0, "n_mmr": 0, "n_reranked": 0,
             "latency_hybrid_ms": t_hybrid, "latency_mmr_ms": 0,
             "latency_rerank_ms": 0, "chunks": [],
-        }
+        }, []
 
     # ── Étape 2 : MMR sur les candidats déjà récupérés ────────────────────
     t_mmr_start  = time.perf_counter()
-    mmr_results  = vectorstore.mmr_from_candidates(candidates, q_emb, k=mmr_k)
+    mmr_results  = vectorstore.mmr_from_candidates(organization_id, candidates,
+                                                   q_emb, k=mmr_k)
     t_mmr        = round((time.perf_counter() - t_mmr_start) * 1000, 1)
 
     mmr_texts = [r[1] for r in mmr_results]
@@ -234,7 +239,30 @@ def _rag_pipeline(
             for i, (idx, s, doc) in enumerate(reranked)
         ],
     }
-    return context_fr, retrieval_trace
+
+    # ── Sources exposées au client ────────────────────────────────────────
+    # La trace ci-dessus est un objet d'observabilité : volumineuse, instable,
+    # et porteuse d'extraits de documents qu'on ne renvoie pas au navigateur.
+    # `sources` en est l'extrait stable et consommable, au premier niveau du
+    # résultat. Le `document_id` vient des métadonnées du fragment : c'est
+    # l'identifiant fourni par l'appelant à l'ingestion, donc sa clé de jointure
+    # — à ne pas confondre avec `chunk_id`, qui change à chaque réindexation.
+    sources = []
+    for i, (idx, score, _doc) in enumerate(reranked):
+        chunk_id, _texte, _s, meta = mmr_results[idx]
+        meta = meta or {}
+        sources.append({
+            "document_id": meta.get("document_id"),
+            "title":       meta.get("title"),
+            "category":    meta.get("category") or None,
+            "chunk_id":    chunk_id,
+            "rank":        i + 1,
+            # Score brut du cross-encoder : non borné, souvent négatif, non
+            # comparable d'une question à l'autre. Il ordonne, il ne note pas.
+            "score":       round(float(score), 4),
+        })
+
+    return context_fr, retrieval_trace, sources
 
 
 # =============================================================================
@@ -243,6 +271,7 @@ def _rag_pipeline(
 
 def answer(
     unified_text: str,
+    organization_id: Optional[str] = None,
     provider: str             = "groq",
     tts: bool                 = False,
     tts_out: str              = "response.wav",
@@ -256,6 +285,10 @@ def answer(
 
     Args:
         unified_text:   Question en wolof ou français.
+        organization_id: UUID de l'organisation dont la base doit être
+                        interrogée. C'est lui qui décide de la base de
+                        connaissances : une réponse ne peut jamais citer le
+                        document d'une autre structure.
         provider:       'groq' | 'gemini' | 'local'
         tts:            Générer une réponse vocale.
         tts_out:        Chemin du fichier audio de sortie.
@@ -276,6 +309,7 @@ def answer(
             response:     réponse dans la langue de l'utilisateur
             response_wo:  réponse en wolof (si entrée wolof)
             question_fr:  question en français (pivot) — à mémoriser par l'appelant
+            sources:      documents ayant nourri la réponse (traçabilité RAG)
             audio:        chemin du fichier audio (si tts=True)
         }
     """
@@ -357,7 +391,8 @@ def answer(
 
     # ── 4. RAG ────────────────────────────────────────────────────────────
     _emit("retrieval")
-    n_docs = vectorstore.count()
+    n_docs = vectorstore.count(organization_id) if organization_id else 0
+    trace["organization_id"] = organization_id
 
     # Une question de suite est complétée par le tour précédent avant recherche.
     query_fr = _contextualize(question_fr, history)
@@ -365,16 +400,29 @@ def answer(
         trace["retrieval_query"] = query_fr
         q_emb = None                      # l'embedding portait l'ancienne requête
 
+    sources: list[dict] = []
     if n_docs > 0:
-        context_fr, retrieval_trace = _rag_pipeline(
-            query_fr, intent, query_embedding=q_emb
+        context_fr, retrieval_trace, sources = _rag_pipeline(
+            organization_id, query_fr, intent, query_embedding=q_emb
         )
         retrieval_trace["source"] = "chromadb"
-    elif seed_docs:
-        # Fallback seed en mémoire (démo sans base persistante)
+    elif seed_docs and settings.SEED_FALLBACK:
+        # Repli sur les documents de démonstration, DÉSACTIVÉ par défaut.
+        #
+        # En multi-tenant ce repli est un piège : une structure fraîchement
+        # créée, dont la base est encore vide, répondrait avec les procédures
+        # génériques du jeu de démonstration — présentées à l'usager comme les
+        # siennes, sans le moindre signe distinctif. Il n'a de sens que sur un
+        # poste de démonstration mono-organisation (SEED_FALLBACK=true).
         context_fr, retrieval_trace = _rag_seed(query_fr, intent, seed_docs, seed_filtered)
         retrieval_trace["source"] = "seed"
+        _log.warning("repli sur les documents de démonstration "
+                     "(organisation=%s, base vide) — SEED_FALLBACK est actif",
+                     organization_id)
     else:
+        # Base vide : le LLM répondra qu'il ne dispose pas de l'information.
+        # Aucun repli, aucune invention, et surtout aucune contamination par
+        # les documents d'une autre organisation.
         context_fr      = ""
         retrieval_trace = {"source": "aucun document", "n_candidates": 0}
 
@@ -399,6 +447,11 @@ def answer(
         "response_fr": response_fr,
         "response":    response_fr,
         "question_fr": question_fr,     # version pivot, à mémoriser
+        # Traçabilité RAG au premier niveau : quels documents ont nourri cette
+        # réponse. Liste vide quand l'organisation n'a aucun document ou
+        # qu'aucun passage n'était pertinent — c'est un cas normal, fréquent
+        # sur une structure qui vient d'être créée, pas une erreur.
+        "sources":     sources,
     }
 
     # ── QR Code pour les procédures ──────────────────────────────────────────

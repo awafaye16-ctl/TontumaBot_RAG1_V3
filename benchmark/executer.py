@@ -200,7 +200,8 @@ def main() -> None:
             sys.exit(f"Aucune question parmi {sorted(voulus)}.")
     cfg = configuration()
     import vectorstore
-    cfg["n_chunks_indexes"] = vectorstore.count()
+    from config import settings as _st
+    cfg["n_chunks_indexes"] = vectorstore.count(_st.ORGANISATION_OUTILS)
 
     print(f"[config] commit {cfg['commit']} "
           f"{'(arbre propre)' if cfg['arbre_propre'] else '(MODIFICATIONS NON COMMITÉES)'} · "
